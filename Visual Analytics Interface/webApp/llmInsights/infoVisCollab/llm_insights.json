@@ -1,0 +1,79 @@
+{
+  "1": {
+    "topic": "Dominant Colors and Interaction Modalities",
+    "insight": "The most frequent colors of objects in the camera's view are blue, orange, green, and purple, with orange being the only color involved in both near (direct grab) and distant (ray selection) interactions, indicating its high visual salience and interaction versatility. Blue, green, and purple objects are exclusively targeted at a distance using ray-based selection.",
+    "analyses": [
+      "Context"
+    ],
+    "timestamps": [
+      "251009_145647_779000",
+      "251009_145649_044000",
+      "251009_145650_177000",
+      "251009_145651_811000",
+      "251009_145718_048000"
+    ]
+  },
+  "2": {
+    "topic": "Spatial Layout and Interaction Distance",
+    "insight": "Distant objects (blue cube, green sphere, purple cube, and one orange cube) are consistently placed beyond reach, requiring ray-based selection and emphasizing depth perception, while the directly grabbed orange cube is positioned within reachable space, establishing a clear physical boundary for interaction modes.",
+    "analyses": [
+      "Context"
+    ],
+    "timestamps": [
+      "251009_145647_779000",
+      "251009_145649_044000",
+      "251009_145650_177000",
+      "251009_145651_811000",
+      "251009_145718_048000"
+    ]
+  },
+  "3": {
+    "topic": "Visual Feedback and Ray Selection Mechanism",
+    "insight": "A laser-like or glowing ray extends from the user\u2019s viewpoint or controller to enable precise targeting of distant objects, accompanied by subtle visual feedback such as glow or outline on selected objects (e.g., blue and purple cubes), confirming engagement and reinforcing interaction accuracy.",
+    "analyses": [
+      "Context"
+    ],
+    "timestamps": [
+      "251009_145647_779000",
+      "251009_145649_044000",
+      "251009_145651_811000",
+      "251009_145718_048000"
+    ]
+  },
+  "4": {
+    "topic": "Scene Design for Focus and Clarity",
+    "insight": "Interaction environments are intentionally sparse with neutral backgrounds and ambient lighting, minimizing visual clutter and shadows to enhance object visibility, surface reflectivity, and focus during selection tasks.",
+    "analyses": [
+      "Context"
+    ],
+    "timestamps": [
+      "251009_145647_779000",
+      "251009_145649_044000",
+      "251009_145650_177000",
+      "251009_145651_811000",
+      "251009_145718_048000"
+    ]
+  },
+  "5": {
+    "topic": "Distinct Real-World Contextual Scenes",
+    "insight": "Two voice-driven actions occur in rich, real-world-inspired settings\u2014a realistic kitchen environment and a dimly lit scene focused on smartphone use\u2014diverging from abstract object manipulation and representing unique narrative contexts without virtual object grabbing.",
+    "analyses": [
+      "Context"
+    ],
+    "timestamps": [
+      "251009_145653_723000",
+      "251009_145656_444000"
+    ]
+  },
+  "6": {
+    "topic": "Recurring Interaction Patterns vs. Unique Events",
+    "insight": "Actions 0\u20133 and 6 form a coherent pattern of repeated, structured object interactions using XR controllers and ray selectors in minimalistic 3D spaces, while Actions 4 and 5 represent isolated, non-manipulative voice interactions set in detailed environmental contexts unrelated to object manipulation.",
+    "analyses": [
+      "Context"
+    ],
+    "timestamps": [
+      "251009_145653_723000",
+      "251009_145656_444000"
+    ]
+  }
+}

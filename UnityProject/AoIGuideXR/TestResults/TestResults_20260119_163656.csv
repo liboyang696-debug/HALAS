@@ -1,0 +1,4 @@
+ActionName,ActionType,IntentType,ActionID,ActionStartTime,ActionEndTime,RecordLatency(ms),WasFiltered
+Grab_PokeButton,Gesture,Interaction,2,15.788,18.597,2808.93,False
+Grab_Cube (Coral),Gesture,Interaction,3,21.313,24.132,2819.26,False
+Grab_Cube (Blue),Gesture,Interaction,4,26.847,29.655,2808.22,False

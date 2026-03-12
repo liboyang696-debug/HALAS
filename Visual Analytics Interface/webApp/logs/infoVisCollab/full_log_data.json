@@ -1,0 +1,212 @@
+[
+    {
+        "Name":"Grab Distant",
+        "Type":"Continuous",
+        "User":"User1",
+        "Intent":"Grabbing a distant object with ray selector",
+        "StartTime":"251009_145647_779000",
+        "Duration":"000000_000000_204000",
+        "TriggerSource":"XRController_L",
+        "ReferentType":"Virtual",
+        "ContextType":"Virtual",
+        "ActionContextDescription":"A person is using a ray selector to grab an orange cube that is positioned at a distance. The interaction highlights the user's intent to remotely select and manipulate the object in a virtual or augmented environment.",
+        "Data":[
+            {
+                "ActionInvokeLocation":"-0.132907,0.3481097,0.3654901,6.611165,0.9125545,14.52729",
+                "ActionInvokeTimestamp":"251009_145647_779000",
+                "ActionReferentLocation":"-0.1329079,0.3481097,0.36549,6.611164,0.9125552,14.52729",
+                "ActionReferentName":"Orange Cube",
+                "ActionReferentBody":"Log\\Object\\1.glb",
+                "ActionContext":"Log\\Context\\1.glb"
+            },
+            {
+                "ActionInvokeLocation":"-0.1324756,0.3486249,0.3658643,6.346879,0.3004403,13.45243",
+                "ActionInvokeTimestamp":"251009_145647_983000",
+                "ActionReferentLocation":"-0.1324763,0.3486249,0.3658643,6.34688,0.3004366,13.45243",
+                "ActionReferentName":"Orange Cube",
+                "ActionReferentBody":"Log\\Object\\1.glb",
+                "ActionContext":"Log\\Context\\2.glb"
+            }
+        ]
+    },
+    {
+        "Name":"Grab Distant",
+        "Type":"Continuous",
+        "User":"User1",
+        "Intent":"Grabbing a distant object with ray selector",
+        "StartTime":"251009_145649_044000",
+        "Duration":"000000_000000_176000",
+        "TriggerSource":"XRController_L",
+        "ReferentType":"Virtual",
+        "ContextType":"Virtual",
+        "ActionContextDescription":"A blue cube is positioned at a distance within a sparse environment, illuminated under neutral lighting. The user is interacting with the cube using a ray selector, which projects a thin, laser-like beam extending from their viewpoint directly toward the cube. The ray precisely aligns with the center of the cube, indicating selection or targeting. The cube remains stationary but visually highlights upon interaction, signaling successful engagement via the ray.",
+        "Data":[
+            {
+                "ActionInvokeLocation":"0.0505299,0.3557972,0.2815692,4.147705,28.4583,12.30427",
+                "ActionInvokeTimestamp":"251009_145649_044000",
+                "ActionReferentLocation":"0.050529,0.3557973,0.2815695,4.147706,28.45829,12.30427",
+                "ActionReferentName":"Blue Cube",
+                "ActionReferentBody":"Log\\Object\\2.glb",
+                "ActionContext":"Log\\Context\\3.glb"
+            },
+            {
+                "ActionInvokeLocation":"0.04454462,0.3544298,0.2867186,4.84073,26.54322,11.94841",
+                "ActionInvokeTimestamp":"251009_145649_220000",
+                "ActionReferentLocation":"0.04454374,0.3544298,0.2867188,4.84073,26.54323,11.94841",
+                "ActionReferentName":"Blue Cube",
+                "ActionReferentBody":"Log\\Object\\2.glb",
+                "ActionContext":"Log\\Context\\4.glb"
+            }
+        ]
+    },
+    {
+        "Name":"Directly Grab",
+        "Type":"Continuous",
+        "User":"User1",
+        "Intent":"Directly grabbing an object",
+        "StartTime":"251009_145650_177000",
+        "Duration":"000000_000000_177000",
+        "TriggerSource":"XRController_L",
+        "ReferentType":"Virtual",
+        "ContextType":"Virtual",
+        "ActionContextDescription":"A bright orange cube is positioned within reach, its edges sharp and surface smooth, reflecting a soft ambient light. The cube sits on a neutral-toned surface, slightly offset from center, making it easily accessible for direct grasping. A hand is extended toward the cube, fingers poised to close around it, indicating an immediate intent to pick it up. The scene is well-lit with minimal shadows, emphasizing the vivid color and solid geometry of the orange cube as the focal point of interaction.",
+        "Data":[
+            {
+                "ActionInvokeLocation":"-0.09866707,0.4216972,0.3400013,351.7601,0.8001106,29.24931",
+                "ActionInvokeTimestamp":"251009_145650_177000",
+                "ActionReferentLocation":"-0.0986681,0.4216971,0.3400016,351.7601,0.8001152,29.24931",
+                "ActionReferentName":"Orange Cube",
+                "ActionReferentBody":"Log\\Object\\1.glb",
+                "ActionContext":"Log\\Context\\5.glb"
+            },
+            {
+                "ActionInvokeLocation":"-0.09845509,0.4201467,0.341052,352.0662,0.7556129,28.90019",
+                "ActionInvokeTimestamp":"251009_145650_354000",
+                "ActionReferentLocation":"-0.09845591,0.4201467,0.3410521,352.0662,0.7556141,28.90019",
+                "ActionReferentName":"Orange Cube",
+                "ActionReferentBody":"Log\\Object\\1.glb",
+                "ActionContext":"Log\\Context\\6.glb"
+            }
+        ]
+    },
+    {
+        "Name":"Grab Distant",
+        "Type":"Continuous",
+        "User":"User1",
+        "Intent":"Grabbing a distant object with ray selector",
+        "StartTime":"251009_145651_811000",
+        "Duration":"000000_000000_233000",
+        "TriggerSource":"XRController_L",
+        "ReferentType":"Virtual",
+        "ContextType":"Virtual",
+        "ActionContextDescription":"A purple cube is positioned at a distance within a 3D environment, visually distinct against a neutral background. The user employs a ray selector\u2014represented as a thin, laser-like beam originating from their viewpoint or controller\u2014that extends across the space and precisely intersects the cube. The moment of interaction is highlighted by a subtle visual cue on the cube, such as a glow or outline, indicating selection. The perspective emphasizes depth and spatial awareness, aligning with the intent to remotely grab the object using the raycasting mechanism.",
+        "Data":[
+            {
+                "ActionInvokeLocation":"0.01598308,0.5701007,0.2844177,354.6313,358.9612,47.93151",
+                "ActionInvokeTimestamp":"251009_145651_811000",
+                "ActionReferentLocation":"0.01598215,0.5701007,0.2844176,354.6313,358.9612,47.93151",
+                "ActionReferentName":"Purple Cube",
+                "ActionReferentBody":"Log\\Object\\3.glb",
+                "ActionContext":"Log\\Context\\7.glb"
+            },
+            {
+                "ActionInvokeLocation":"0.01689069,0.5677257,0.2851532,354.3531,357.9215,44.6631",
+                "ActionInvokeTimestamp":"251009_145652_044000",
+                "ActionReferentLocation":"0.01688957,0.5677257,0.2851534,354.3531,357.9215,44.6631",
+                "ActionReferentName":"Purple Cube",
+                "ActionReferentBody":"Log\\Object\\3.glb",
+                "ActionContext":"Log\\Context\\8.glb"
+            }
+        ]
+    },
+    {
+        "Name":"Voice",
+        "Type":"Continuous",
+        "User":"User1",
+        "Intent":"Unknown",
+        "StartTime":"251009_145653_723000",
+        "Duration":"000000_000002_601999",
+        "TriggerSource":"Microphone",
+        "ReferentType":"Virtual",
+        "ContextType":"Virtual",
+        "ActionContextDescription":"The image shows a modern kitchen with light wooden cabinets, black countertops, and stainless steel appliances. A microwave is mounted above the stove, which has a glass cooktop. Various kitchen items are visible, including a coffee maker, a toaster, and several small appliances on the countertop. There are also decorative elements such as plants and artwork on the walls. The overall style is clean and contemporary.",
+        "Data":[
+            {
+                "ActionInvokeLocation":"-0.003934789,0.6445704,-0.002250802,5.641871,3.173275,0.851776",
+                "ActionInvokeTimestamp":"251009_145653_723000",
+                "ActionReferentLocation":null,
+                "ActionReferentName":null,
+                "ActionReferentBody":"",
+                "ActionContext":"Log\\Context\\9.glb"
+            },
+            {
+                "ActionInvokeLocation":"-0.003052622,0.6500301,-0.006635286,3.571409,2.237212,358.9943",
+                "ActionInvokeTimestamp":"251009_145656_325000",
+                "ActionReferentLocation":null,
+                "ActionReferentName":null,
+                "ActionReferentBody":"",
+                "ActionContext":"Log\\Context\\10.glb"
+            }
+        ]
+    },
+    {
+        "Name":"Voice",
+        "Type":"Continuous",
+        "User":"User1",
+        "Intent":"Unknown",
+        "StartTime":"251009_145656_444000",
+        "Duration":"000000_000016_071999",
+        "TriggerSource":"Microphone",
+        "ReferentType":"Virtual",
+        "ContextType":"Virtual",
+        "ActionContextDescription":"The image shows a person holding a smartphone in their hand, with the screen displaying a bright interface. The individual appears to be interacting with the device, possibly engaging with an app or browsing content. The surrounding environment is dimly lit, suggesting indoor lighting conditions, and the focus is primarily on the illuminated phone screen and the user's hand.",
+        "Data":[
+            {
+                "ActionInvokeLocation":"-0.0031064,0.6497452,-0.006542224,3.491144,2.207231,359.1",
+                "ActionInvokeTimestamp":"251009_145656_444000",
+                "ActionReferentLocation":null,
+                "ActionReferentName":null,
+                "ActionReferentBody":"",
+                "ActionContext":"Log\\Context\\11.glb"
+            },
+            {
+                "ActionInvokeLocation":"0.02232169,0.6458886,-0.01275843,3.549425,2.485051,356.4398",
+                "ActionInvokeTimestamp":"251009_145712_516000",
+                "ActionReferentLocation":null,
+                "ActionReferentName":null,
+                "ActionReferentBody":"",
+                "ActionContext":"Log\\Context\\12.glb"
+            }
+        ]
+    },
+    {
+        "Name":"Grab Distant",
+        "Type":"Continuous",
+        "User":"User1",
+        "Intent":"Grabbing a distant object with ray selector",
+        "StartTime":"251009_145718_048000",
+        "Duration":"000000_000000_177000",
+        "TriggerSource":"XRController_L",
+        "ReferentType":"Virtual",
+        "ContextType":"Virtual",
+        "ActionContextDescription":"A green sphere is positioned at a distance within the scene, illuminated under ambient lighting that highlights its smooth, reflective surface. The sphere stands out against a neutral background, with subtle shadows grounding it in the environment. A ray selector, represented as a thin, glowing line extending from the user's viewpoint, aligns precisely with the sphere, indicating active targeting for interaction. The visual focus emphasizes depth and spatial alignment, supporting the intent to grab the distant object using precision ray-based selection.",
+        "Data":[
+            {
+                "ActionInvokeLocation":"0.2117801,0.3906836,-0.07675448,359.6249,81.31463,17.56654",
+                "ActionInvokeTimestamp":"251009_145718_048000",
+                "ActionReferentLocation":"0.2117791,0.3906837,-0.07675457,359.6249,81.31464,17.56654",
+                "ActionReferentName":"Green Sphere",
+                "ActionReferentBody":"Log\\Object\\4.glb",
+                "ActionContext":"Log\\Context\\13.glb"
+            },
+            {
+                "ActionInvokeLocation":"0.2022389,0.4021986,-0.09002186,359.7383,78.91747,15.45018",
+                "ActionInvokeTimestamp":"251009_145718_225000",
+                "ActionReferentLocation":"0.2022381,0.4021986,-0.09002209,359.7383,78.91747,15.45018",
+                "ActionReferentName":"Green Sphere",
+                "ActionReferentBody":"Log\\Object\\4.glb",
+                "ActionContext":"Log\\Context\\14.glb"
+            }
+        ]
+    }
+]

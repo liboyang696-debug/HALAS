@@ -1,0 +1,11 @@
+{
+    "aoiThreshold": 0.6,
+    "priorInteraction": 0.60,
+    "priorMovement": 0.01,
+    "priorEyeTracking": 0.01,
+    "priorCommunication": 0.38,
+    "likelihoodInteraction": [0.75, 0.15, 0.05, 0.05],
+    "likelihoodMovement": [0.25, 0.25, 0.25, 0.25],
+    "likelihoodEyeTracking": [0.20, 0.50, 0.25, 0.05],
+    "likelihoodCommunication": [0.15, 0.18, 0.65, 0.02]
+}

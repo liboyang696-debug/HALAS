@@ -1,0 +1,24 @@
+[
+    {
+        "Name":"PressDigitKey",
+        "Type":"Discrete",
+        "User":"User1",
+        "Intent":"Test 'logging functionality 1' of a data logger",
+        "StartTime":"250911_155931_100000",
+        "Duration":"000000_000000_500000",
+        "TriggerSource":"XRHMD",
+        "ReferentType":"Virtual",
+        "ContextType":"Virtual",
+        "ActionContextDescription":"Unknown",
+        "Data":[
+            {
+                "ActionInvokeLocation":"0,0,0,0,0,0",
+                "ActionInvokeTimestamp":"250911_155931_100000",
+                "ActionReferentLocation":"0,0,0.899,0,45,0",
+                "ActionReferentName":"Red Box",
+                "ActionReferentBody":"Log\\Object\\1.glb",
+                "ActionContext":"Log\\Context\\1.glb"
+            }
+        ]
+    }
+]

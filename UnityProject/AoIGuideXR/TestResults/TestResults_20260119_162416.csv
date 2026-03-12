@@ -1,0 +1,4 @@
+ActionName,ActionType,IntentType,ActionID,ActionStartTime,ActionEndTime,RecordLatency(ms),WasFiltered
+Grab_Chess Pawn,Gesture,Interaction,2,15.812,18.634,2821.30,False
+Grab_PokeButton,Gesture,Interaction,3,21.370,24.189,2818.33,False
+Grab_Touchpad Flat,Gesture,Interaction,4,26.911,29.724,2813.04,False

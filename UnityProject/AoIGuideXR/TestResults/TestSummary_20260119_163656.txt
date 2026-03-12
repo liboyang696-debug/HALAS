@@ -1,0 +1,21 @@
+========== XRAoILogger 自动化测试报告 ==========
+测试时间: 2026/1/19 16:36:56
+测试时长: 36.4 秒
+总动作数: 3
+
+意图置信度:
+  Interaction:    0.559
+  Movement:       0.010
+  EyeTracking:    0.010
+  Communication:  0.421
+
+动作记录时延统计:
+  平均时延: 2812.13 ms (动作开始 → LogContinuousActionEnd)
+  最大时延: 2819.26 ms
+  最小时延: 2808.22 ms
+
+说明:
+  此测试仅记录VR动作的记录时延（从动作发生到LogContinuousActionEnd）
+  后续处理时延和上传时延请查看UADParserAndSender和EdgeUploader的日志
+
+============================================
