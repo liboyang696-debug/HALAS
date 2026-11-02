@@ -4,6 +4,17 @@
 
 HALAS collects XR behavior evidence on a Unity client, reconstructs User Behavior Representations (UBRs) on an edge server, and presents behavior insights with their supporting evidence in a Web analyst console. A confidence gate can defer uncertain edge outputs to cloud language models and select a candidate through embedding-based semantic voting.
 
+## Publication
+
+**HALAS: On-Demand and AoI-Guided Explainability for Real-Time XR Analytics**
+
+Boyang Li, Chongli Zhang, Chunsheng Wang, Ping Lu, Xiuquan Qiao, and Yakun Huang.
+
+*IEEE Transactions on Visualization and Computer Graphics*, 2026, pp. 1-16.
+
+- **DOI:** [10.1109/TVCG.2026.3747276](https://doi.org/10.1109/TVCG.2026.3747276)
+- **IEEE Xplore:** [Article 11754050](https://ieeexplore.ieee.org/document/11754050)
+
 ## Source layout
 
 ```text
@@ -95,3 +106,19 @@ The page loads its bundled Three.js runtime locally. Captured GLB files and cont
 ## Third-party code
 
 The adapted ExplainableXR package retains its original MIT license and attribution in `UnityProject/ExplainableXR/LICENSE`. The Web viewer includes Three.js and its loaders/controls under the license in `Visual Analytics Interface/webApp/vendor/three/LICENSE`. See `THIRD_PARTY_NOTICES.md` for source attribution.
+
+## Citation
+
+If you use HALAS in your research, please cite:
+
+```bibtex
+@article{li2026halas,
+  author  = {Li, Boyang and Zhang, Chongli and Wang, Chunsheng and Lu, Ping and Qiao, Xiuquan and Huang, Yakun},
+  title   = {{HALAS}: On-Demand and {AoI}-Guided Explainability for Real-Time {XR} Analytics},
+  journal = {IEEE Transactions on Visualization and Computer Graphics},
+  year    = {2026},
+  pages   = {1--16},
+  doi     = {10.1109/TVCG.2026.3747276},
+  url     = {https://ieeexplore.ieee.org/document/11754050}
+}
+```
