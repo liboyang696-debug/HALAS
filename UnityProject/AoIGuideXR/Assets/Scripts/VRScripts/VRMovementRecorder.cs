@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using ExplainableXR;
 using Logger = ExplainableXR.Logger;
@@ -9,6 +10,7 @@ public class VRMovementRecorder
     private readonly Logger logger;
     private readonly AoIBayesianFilter aoiFilter;
     private readonly float continueActionSamplingInterval;
+    private readonly float bayesianUpdateInterval;
     private readonly float minRGBDSamplingInterval;
     private readonly float maxRGBDSamplingInterval;
     private readonly float moveSpeed;
@@ -16,11 +18,18 @@ public class VRMovementRecorder
     private int leftMoveActionID;
     private int rightMoveActionID;
     private float lastMovementSamplingTime = 0f;
+    private float lastMovementUploadTime = 0f;
     private float lastRGBDSamplingTime = 0f;
     private float currentRGBDSamplingInterval = 1.0f;
+    private string movementBehaviorId = string.Empty;
+    private string movementActionName = "Navigate";
+    private float movementStartTime;
+    private Vector3 lastMovementPosition;
+    private Quaternion lastMovementRotation = Quaternion.identity;
 
     public VRMovementRecorder(Camera userHeadCam, Transform vrHMDTransform, Logger logger,
         AoIBayesianFilter aoiFilter, float continueActionSamplingInterval,
+        float bayesianUpdateInterval,
         float minRGBDSamplingInterval, float maxRGBDSamplingInterval, float moveSpeed)
     {
         this.userHeadCam = userHeadCam;
@@ -28,45 +37,133 @@ public class VRMovementRecorder
         this.logger = logger;
         this.aoiFilter = aoiFilter;
         this.continueActionSamplingInterval = continueActionSamplingInterval;
+        this.bayesianUpdateInterval = Mathf.Clamp(bayesianUpdateInterval, 0.01f, 0.05f);
         this.minRGBDSamplingInterval = minRGBDSamplingInterval;
         this.maxRGBDSamplingInterval = maxRGBDSamplingInterval;
         this.moveSpeed = moveSpeed;
+        // Allow the first eligible Context frame immediately instead of waiting
+        // one full sampling interval after Play starts.
+        lastRGBDSamplingTime = Time.time - Mathf.Max(0f, minRGBDSamplingInterval);
     }
 
 
     public int OnHMDMovementBegin()
     {
-        var observedAction = new ObservedAction(UserActionType.Pose, IntentType.Movement,
-            "User's VRHMD movement", null);
-        int actionId = 0;
-        if (aoiFilter.GetIntentConfidence(IntentType.Movement) >= aoiFilter.aoiThreshold)
-        {
-            actionId = logger.LogContinuousActionBegin("Navigate", "User is moving in VR space",
-                ActionTriggerSource.XRHMD, vrHMDTransform, null, null,
-                ReferentType.None, ActionContextType.Virtual, LogRecordType.UBRLog);
-        }
-        aoiFilter.ProcessObservedAction(observedAction);
-        lastMovementSamplingTime = Time.time;
+        return OnHMDMovementBegin(null);
+    }
+
+    public int OnHMDMovementBegin(string actionName)
+    {
+        movementActionName = string.IsNullOrWhiteSpace(actionName)
+            ? "Navigate" : actionName.Trim();
+        movementBehaviorId = "vr-hmd-movement-" + Guid.NewGuid().ToString("N");
+        movementStartTime = Time.unscaledTime;
+        lastMovementPosition = vrHMDTransform.position;
+        lastMovementRotation = vrHMDTransform.rotation;
+        var observedAction = new ObservedAction(ActionEvidenceType.PoseMotion,
+            "User's VRHMD movement", null, 0, movementBehaviorId,
+            BehaviorEventPhase.Begin, TriggerModality.HMD,
+            CurrentBehaviorState.Navigating, IntentType.Movement,
+            BehaviorTemporalType.Continuous);
+        observedAction.sequenceNumber = 0;
+        observedAction.motionObserved = EvidenceValue.True;
+        AoIDecision decision = aoiFilter.ObserveEvidence(observedAction);
+        int actionId = decision.shouldUpload ? StartMovementUpload() : 0;
+        AoIUBRMetadataBridge.Register(actionId, observedAction, decision);
+        lastMovementSamplingTime = Time.unscaledTime;
+        lastMovementUploadTime = Time.unscaledTime;
         return actionId;
     }
 
     public int OnHMDMovementContinue(int actionId)
     {
-        if (actionId == 0) return 0;
-        if (Time.time - lastMovementSamplingTime < continueActionSamplingInterval) return 0;
-        var observedAction = new ObservedAction(UserActionType.Pose, IntentType.Movement,
-            "User's VRHMD movement continues", null);
-        if (aoiFilter.GetIntentConfidence(IntentType.Movement) >= aoiFilter.aoiThreshold)
-            logger.LogContinuousActionContinue(actionId);
-        aoiFilter.ProcessObservedAction(observedAction);
-        lastMovementSamplingTime = Time.time;
-        return 0;
+        if (Time.unscaledTime - lastMovementSamplingTime < bayesianUpdateInterval) return actionId;
+        float now = Time.unscaledTime;
+        float interval = Mathf.Max(0.0001f, now - lastMovementSamplingTime);
+        float translation = Vector3.Distance(lastMovementPosition, vrHMDTransform.position);
+        float rotation = Quaternion.Angle(lastMovementRotation, vrHMDTransform.rotation);
+        var observedAction = new ObservedAction(ActionEvidenceType.PoseMotion,
+            "User's VRHMD movement continues", null, 0, movementBehaviorId,
+            BehaviorEventPhase.Continue, TriggerModality.HMD,
+            CurrentBehaviorState.Navigating, IntentType.Movement,
+            BehaviorTemporalType.Continuous);
+        observedAction.elapsedSeconds = Mathf.Max(0f, now - movementStartTime);
+        observedAction.intervalSeconds = interval;
+        observedAction.translationMeters = translation;
+        observedAction.rotationDegrees = rotation;
+        observedAction.linearSpeed = translation / interval;
+        observedAction.angularSpeed = rotation / interval;
+        observedAction.motionObserved = EvidenceValue.True;
+        AoIDecision decision = aoiFilter.ObserveEvidence(observedAction);
+        if (decision.sendCancel)
+        {
+            CancelUpload(actionId);
+            actionId = 0;
+        }
+        else if (decision.confirmed && !decision.rejected)
+        {
+            if (actionId <= 0)
+            {
+                actionId = StartMovementUpload();
+                AoIUBRMetadataBridge.Register(actionId, observedAction, decision,
+                    BehaviorEventPhase.Begin);
+                lastMovementUploadTime = now;
+            }
+            else if (now - lastMovementUploadTime >= continueActionSamplingInterval)
+            {
+                logger.LogContinuousActionContinue(actionId);
+                AoIUBRMetadataBridge.Register(actionId, observedAction, decision);
+                lastMovementUploadTime = now;
+            }
+        }
+        lastMovementSamplingTime = now;
+        lastMovementPosition = vrHMDTransform.position;
+        lastMovementRotation = vrHMDTransform.rotation;
+        return actionId;
     }
 
     public int OnHMDMovementEnd(int actionId)
     {
-        logger.LogContinuousActionEnd(actionId);
+        var end = new ObservedAction(ActionEvidenceType.PoseMotion,
+            "User's VRHMD movement ends", null, 0, movementBehaviorId,
+            BehaviorEventPhase.End, TriggerModality.HMD,
+            CurrentBehaviorState.Navigating, IntentType.Movement,
+            BehaviorTemporalType.Continuous);
+        end.elapsedSeconds = Mathf.Max(0f, Time.unscaledTime - movementStartTime);
+        end.motionObserved = EvidenceValue.False;
+        AoIDecision decision = aoiFilter.ObserveEvidence(end);
+        if (decision.sendCancel && actionId > 0)
+            CancelUpload(actionId);
+        else if (decision.shouldUpload)
+        {
+            if (actionId <= 0)
+            {
+                actionId = StartMovementUpload();
+                AoIUBRMetadataBridge.Register(actionId, end, decision,
+                    BehaviorEventPhase.Begin);
+            }
+            logger.LogContinuousActionEnd(actionId);
+            AoIUBRMetadataBridge.Register(actionId, end, decision);
+        }
+        movementBehaviorId = string.Empty;
+        movementActionName = "Navigate";
         return 0;
+    }
+
+    private void CancelUpload(int actionId)
+    {
+        if (actionId <= 0) return;
+        logger.DiscardContinuousAction(actionId);
+        if (UBRParserAndSender.Instance != null)
+            UBRParserAndSender.Instance.CancelAoIAction(actionId);
+    }
+
+    private int StartMovementUpload()
+    {
+        return logger.LogContinuousActionBegin(
+            movementActionName, "User is moving in VR space",
+            ActionTriggerSource.XRHMD, vrHMDTransform, null, null,
+            ReferentType.None, ActionContextType.Virtual, LogRecordType.UBRLog);
     }
 
 
@@ -84,7 +181,7 @@ public class VRMovementRecorder
 
     public int OnLeftJoystickEnd(ReferentMetadata referentMetadata)
     {
-        logger.LogContinuousActionEnd(leftMoveActionID);
+        if (leftMoveActionID > 0) logger.LogContinuousActionEnd(leftMoveActionID);
         return 0;
     }
 
@@ -102,7 +199,7 @@ public class VRMovementRecorder
 
     public int OnRightJoystickEnd(ReferentMetadata referentMetadata)
     {
-        logger.LogContinuousActionEnd(rightMoveActionID);
+        if (rightMoveActionID > 0) logger.LogContinuousActionEnd(rightMoveActionID);
         return 0;
     }
 
@@ -115,11 +212,19 @@ public class VRMovementRecorder
     }
 
 
-    // Adaptive RGBD sampling based on pose probability from AoI filter
+    // Dynamic Context sampling based on the AoI posterior of confirmed behaviors.
     public void SampleRGBD()
     {
-        float poseProbability = aoiFilter.CalculateMarginalProbability(UserActionType.Pose);
-        currentRGBDSamplingInterval = Mathf.Lerp(maxRGBDSamplingInterval, minRGBDSamplingInterval, poseProbability);
+        // With AoI enabled, expensive RGB-D capture is allowed only while at
+        // least one behavior is confirmed.  The No-AoI ablation deliberately
+        // bypasses that gate, so it must continue sampling the full context
+        // stream instead of silently producing zero Context messages.
+        if (aoiFilter.FilteringEnabled && !aoiFilter.HasConfirmedBehavior) return;
+        float behaviorAoIConfidence = aoiFilter.FilteringEnabled
+            ? aoiFilter.GetConfirmedBehaviorAoIConfidence()
+            : 1f;
+        currentRGBDSamplingInterval = Mathf.Lerp(maxRGBDSamplingInterval,
+            minRGBDSamplingInterval, behaviorAoIConfidence);
         if (Time.time - lastRGBDSamplingTime >= currentRGBDSamplingInterval)
         {
             if (logger?.imageRecordManager != null)

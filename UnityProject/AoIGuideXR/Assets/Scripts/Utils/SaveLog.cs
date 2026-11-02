@@ -1,23 +1,18 @@
-using System;
 using System.Collections;
 using System.IO;
 using UnityEngine;
-using System.Net.Http;
-using System.Xml;
 
 public class SaveLog : MonoBehaviour
 {
-    private float length;
-    Queue queue;
+    private Queue queue;
+
     private void Awake()
     {
         DontDestroyOnLoad(this);
         Application.logMessageReceivedThreaded += OnReceiveLogMsg;
         queue = new Queue();
     }
-    // Start is called before the first frame update
-
-    void OnReceiveLogMsg(string condition, string stackTrace, LogType type)
+    private void OnReceiveLogMsg(string condition, string stackTrace, LogType type)
     {
         string _type = "";
         switch (type)
@@ -44,14 +39,14 @@ public class SaveLog : MonoBehaviour
         queue.Enqueue(msg);
     }
 
-    void Update()
+    private void Update()
     {
-#if UNITY_EDITOR
-#else
+#if !UNITY_EDITOR
         CheckLogs();
 #endif
     }
-    void CheckLogs()
+
+    private void CheckLogs()
     {
         if (queue.Count != 0)
         {
@@ -61,29 +56,19 @@ public class SaveLog : MonoBehaviour
     public void LogToFile(string str, bool bwithTime, bool bAppendLineFeed, System.Action callback = null)
     {
         if (str == null) return;
-        try
-        {
 #if UNITY_EDITOR
-            string fname = Application.dataPath + "/Unitylog_lby.txt";
+        string fname = Path.Combine(Application.dataPath, "Unitylog_lby.txt");
 #else
-            string fname = Application.persistentDataPath+ "/Unitylog_lby.txt";
+        string fname = Path.Combine(Application.persistentDataPath, "Unitylog_lby.txt");
 #endif
-
-
-            if (fname == "" || fname == null) return;
-
-            StreamWriter writer = new StreamWriter(fname, true, System.Text.Encoding.Default);
-
+        using (var writer = new StreamWriter(fname, true, System.Text.Encoding.Default))
+        {
             if (bwithTime) writer.WriteLine("\r\n\r\n---------" + System.DateTime.Now.ToString());
             if (bAppendLineFeed) writer.WriteLine(str);
             else writer.Write(str);
-            writer.Close();
-            callback?.Invoke();
         }
-        catch
-        {
 
-            throw;
-        }
+        // Remove a queued entry only after the write and flush both succeed.
+        callback?.Invoke();
     }
 }

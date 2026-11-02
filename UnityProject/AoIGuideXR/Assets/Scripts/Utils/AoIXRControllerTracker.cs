@@ -1,9 +1,6 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using ExplainableXR;
 
 public enum InteractionType
 {
@@ -67,7 +64,6 @@ public class AoIXRControllerTracker : AoIXRTracker
                                 inputAction.name.Contains("2DAxis") ||
                                 inputAction.name.Contains("Joystick") ||
                                 inputAction.name.Contains("thumbstick");
-        Debug.Log($"isJoystickAction: {isJoystickAction}   {inputAction.name.Contains("2DAxis")}     {inputAction.name.Contains("Joystick")}     {inputAction.name.Contains("thumbstick")}");
         if (isJoystickAction)
             HandleJoystickInput();
         else

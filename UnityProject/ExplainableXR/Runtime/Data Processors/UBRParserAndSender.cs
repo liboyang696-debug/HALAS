@@ -17,7 +17,8 @@ namespace ExplainableXR
         public string userId = "User1";
 
         [Header("Queue Upload Settings")]
-        public float queuePollInterval = 0.1f;
+        [Tooltip("Keep this small: Begin-to-first-insight has a 100 ms total budget.")]
+        public float queuePollInterval = 0.01f;
         public int queueWarningThreshold = 50;
         public int queueMaxLength = 100;
         public Logger xrLogger;
@@ -42,6 +43,14 @@ namespace ExplainableXR
             public string ActionReferentName;
             public string ActionReferentType;
             public string ActionContextType;
+        }
+
+        [Serializable]
+        public class AoIFragmentMetadata
+        {
+            public string Phase;
+            public string AoIState;
+            public int FragmentSequence = -1;
         }
 
         [Serializable]
@@ -80,6 +89,17 @@ namespace ExplainableXR
         public void UploadUBR(UBRItem ubrItem)
         {
             StartCoroutine(UploadUBRCoroutine(ubrItem));
+        }
+
+        public void RegisterAoIFragment(int actionId, AoIFragmentMetadata metadata)
+        {
+            // Compatibility no-op. MiniMind3 was trained on one complete UBR
+            // per record, without lifecycle metadata.
+        }
+
+        public void CancelAoIAction(int actionId)
+        {
+            // Nothing was staged on the edge, so no cancellation frame is needed.
         }
 
         public void UploadContext(Texture2D colorTexture = null, Texture2D depthTexture = null,
@@ -173,10 +193,10 @@ namespace ExplainableXR
                 yield return null;
         }
 
-        private async Task UploadUBRAsync(UBRItem ubrItem, string ubrId = null)
+        private async Task UploadUBRAsync(UBRItem ubrItem)
         {
             string ubrJson = JsonConvert.SerializeObject(ubrItem, Formatting.Indented);
-            await uploader.SendUBRAsync(ubrJson, sceneId, ubrId);
+            await uploader.SendUBRAsync(ubrJson, sceneId);
         }
 
         private async Task UploadContextAsync(Texture2D colorTexture, Texture2D depthTexture,
@@ -237,11 +257,10 @@ namespace ExplainableXR
                     continue;
                 }
 
-                int actionId = logItem.ActionTypeAndIdBit & 0xFFFFFF;
-                string ubrId = $"UBR_{actionId}_{logItem.Timestamp}";
                 var ubrItem = CreateFromDescriptor(logItem);
 
-                var task = UploadUBRAsync(ubrItem, ubrId);
+                string ubrJson = JsonConvert.SerializeObject(ubrItem, Formatting.Indented);
+                var task = uploader.SendUBRAsync(ubrJson, sceneId);
                 while (!task.IsCompleted)
                     yield return null;
 

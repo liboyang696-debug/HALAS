@@ -52,7 +52,7 @@ namespace Whisper.Utils
             var srcLenSec = (float) srcLen / srcSampleRate;
             var dstLen = Mathf.RoundToInt(srcLenSec * dstSampleRate);
             var dst = new float[dstLen];
-            
+
             for (var i = 0; i < dstLen; i++)
             {
                 var index = (float)i / dstLen * srcLen;
@@ -64,7 +64,7 @@ namespace Whisper.Utils
                 else
                     dst[i] = Mathf.Lerp(src[low], src[low + 1], dif);
             }
-            
+
             return dst;
         }
 
@@ -76,33 +76,33 @@ namespace Whisper.Utils
             // https://github.com/ggerganov/whisper.cpp/blob/a792c4079ce61358134da4c9bc589c15a03b04ad/examples/common.cpp#L697
             var nSamples = data.Length;
             var nSamplesLast = (int) (sampleRate * lastSec);
-            
-            if (nSamplesLast >= nSamples) 
+
+            if (nSamplesLast >= nSamples)
             {
                 // not enough samples - assume no speech
                 return false;
             }
-            
-            if (freqThd > 0.0f) 
+
+            if (freqThd > 0.0f)
                 HighPassFilter(data, freqThd, sampleRate);
-            
+
             var energyAll = 0.0f;
             var energyLast = 0.0f;
-            
-            for (var i = 0; i < nSamples; i++) 
+
+            for (var i = 0; i < nSamples; i++)
             {
                 energyAll += Mathf.Abs(data[i]);
 
-                if (i >= nSamples - nSamplesLast) 
+                if (i >= nSamples - nSamplesLast)
                     energyLast += Mathf.Abs(data[i]);
             }
-            
+
             energyAll /= nSamples;
             energyLast /= nSamplesLast;
-            
+
             return energyLast >  vadThd * energyAll;
         }
-        
+
         /// <summary>
         /// Return a copy of array after high pass filter.
         /// </summary>
@@ -112,12 +112,12 @@ namespace Whisper.Utils
             if (data.Length == 0)
                 return;
 
-            var rc = 1.0f / (2.0f * Mathf.PI * cutoff); 
+            var rc = 1.0f / (2.0f * Mathf.PI * cutoff);
             var dt = 1.0f / sampleRate;
             var alpha = dt / (rc + dt);
-            
+
             var y = data[0];
-            for (var i = 1; i < data.Length; i++) 
+            for (var i = 1; i < data.Length; i++)
             {
                 y = alpha * (y + data[i] - data[i - 1]);
                 data[i] = y;

@@ -1,6 +1,5 @@
-"""LLM Voting System with Semantic Entropy and Bayesian Variance"""
+"""LLM voting system with MBR-style semantic consensus."""
 
-import json
 import numpy as np
 import torch
 from typing import Dict, List, Optional
@@ -11,7 +10,10 @@ logger = logging.getLogger(__name__)
 
 
 class SemanticEntropyVoting:
-    """Semantic entropy-based LLM voting system"""
+    """MBR-style LLM voting system.
+
+    The class name is kept for compatibility with the current imports.
+    """
 
     def __init__(self, embeddings_model=None, tokenizer=None,
                  temperature: float = 1.0, sigma_sq_max: float = 0.25, epsilon: float = 1e-6):
@@ -37,7 +39,7 @@ class SemanticEntropyVoting:
         return embeddings.cpu().numpy()
 
     def vote(self, llm_insights: List[Dict], llm_names: Optional[List[str]] = None) -> Dict:
-        """Vote for the best insight based on semantic similarity confidence"""
+        """Vote for the best insight using average pairwise semantic utility."""
         if not llm_insights:
             raise ValueError("At least one LLM insight is required")
 
@@ -46,32 +48,24 @@ class SemanticEntropyVoting:
             llm_names = [f"LLM_{i+1}" for i in range(n)]
 
         embeddings = self.compute_embeddings(llm_insights)
-        centroid = np.mean(embeddings, axis=0, keepdims=True)
-        similarities = cosine_similarity(embeddings, centroid).flatten()
-
-        # Softmax probability distribution
-        exp_sim = np.exp(similarities / self.temperature)
-        probabilities = exp_sim / np.sum(exp_sim)
-
-        # Semantic entropy
-        p_safe = np.clip(probabilities, self.epsilon, 1.0)
-        se = -np.sum(probabilities * np.log(p_safe))
-        se_norm = se / (np.log(n) + self.epsilon)
-        var_b = self.sigma_sq_max * se_norm
+        similarity_matrix = cosine_similarity(embeddings)
+        if n == 1:
+            consensus_scores = np.ones(1, dtype=float)
+        else:
+            consensus_scores = (np.sum(similarity_matrix, axis=1) - 1.0) / (n - 1)
 
         results = []
         for i, (insight, name) in enumerate(zip(llm_insights, llm_names)):
             results.append({
                 **insight, "llm_name": name,
-                "similarity_to_center": float(similarities[i]),
-                "probability": float(probabilities[i]),
-                "semantic_entropy": float(se),
-                "semantic_entropy_normalized": float(se_norm),
-                "bayesian_variance": float(var_b),
-                "bayesian_std": float(np.sqrt(var_b)),
-                "confidence_score": float(probabilities[i])
+                "average_pairwise_similarity": float(consensus_scores[i]),
+                "similarity_to_center": float(consensus_scores[i]),
+                "consensus_score": float(consensus_scores[i]),
+                "pairwise_similarities": [
+                    float(similarity_matrix[i, j]) for j in range(n) if j != i
+                ],
             })
 
-        best = max(results, key=lambda x: x['confidence_score'])
-        logger.info(f"[Voting] Best: {best['llm_name']} (confidence={best['confidence_score']:.3f})")
+        best = max(results, key=lambda x: x['consensus_score'])
+        logger.info(f"[Voting] Best: {best['llm_name']} (consensus={best['consensus_score']:.3f})")
         return best

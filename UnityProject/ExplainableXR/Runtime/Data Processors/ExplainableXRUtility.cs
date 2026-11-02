@@ -184,7 +184,7 @@ namespace ExplainableXR
             }
             else
             {
-                Debug.LogWarning("Failed to get camera intrinsics. Falling back to estimated intrinsics.");
+                Debug.LogWarning("Failed to get camera intrinsics. Falling back to FOV-derived intrinsics.");
                 screenRes.Set(Screen.width, Screen.height);
                 intrinsicMatrix = GetIntrinsicMatrix(camera);
                 focalLengthX = intrinsicMatrix[0, 0];

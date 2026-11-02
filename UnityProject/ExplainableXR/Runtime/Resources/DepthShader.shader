@@ -1,5 +1,5 @@
 Shader "Custom/DepthShader" {
-    SubShader 
+    SubShader
     {
 	Tags { "RenderType"="Opaque" }
 
@@ -39,7 +39,7 @@ Shader "Custom/DepthShader" {
 
             //Fragment Shader
             fixed4 frag (v2f i) : COLOR
-            {               
+            {
                 float depth = Linear01Depth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv.xy / i.uv.w));
                 return fixed4(depth, depth, depth, 1.0);
             }

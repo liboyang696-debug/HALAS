@@ -1,0 +1,72 @@
+# Credentials and local deployment overrides
+.env
+.env.*
+!.env.example
+*.keystore
+*.p12
+*.pem
+
+# Dependencies and caches
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.idea/
+.vscode/
+.DS_Store
+
+# Unity-generated files
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Bb]uild/
+[Bb]uilds/
+*.csproj
+*.sln
+*.apk
+*.aab
+*.unitypackage
+*_BurstDebugInformation_DoNotShip/
+
+# Model weights, checkpoints and scene geometry
+models/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.safetensors
+*.gguf
+*.onnx
+*.h5
+*.tflite
+*.glb
+*.gltf
+*.fbx
+*.obj
+
+# Generated captures, experiments and reports
+work/
+output/
+outputs/
+TestResults/
+baseline_runs/
+datasets/
+Datasets/
+BehaviorProcessor/HALAS/Reference/
+BehaviorProcessor/Output/
+Visual Analytics Interface/webApp/obj/
+*.csv
+*.jsonl
+*.ndjson
+*.pdf
+*.docx
+*.xlsx
+*.png
+*.jpg
+*.jpeg
+*.wav
+*.zip

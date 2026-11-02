@@ -16,6 +16,7 @@ receiver = None
 
 
 def sync_reference_to_webapp(reference_dir, webapp_reference_dir):
+    """Migrate flat reference models to User1 and mirror them into the web assets."""
     import shutil
     from pathlib import Path
     reference_dir = Path(reference_dir)
@@ -54,67 +55,62 @@ def sync_reference_to_webapp(reference_dir, webapp_reference_dir):
 
 async def main():
     global processor, receiver
-    from pathlib import Path
+    frontend_notifier = None
 
-    logger.info(f"Starting XR data server on ws://{config.WS_HOST}:{config.WS_PORT}")
+    try:
+        logger.info(f"Starting XR data server on ws://{config.WS_HOST}:{config.WS_PORT}")
+        logger.info(
+            "Model interfaces: tiny=%s (%s), image2text=%s (%s)",
+            "enabled" if config.ENABLE_TINY_MODEL else "disabled",
+            config.LLM_INSIGHT_API_URL,
+            "enabled" if config.ENABLE_IMAGE2TEXT_MODEL else "disabled",
+            config.IMAGE2TEXT_API_URL
+        )
+        logger.info(
+            "VR baseline switch: default=%s, shared_config=%s",
+            config.BASELINE_MODE,
+            config.BASELINE_CONFIG_PATH or "config/vr_baseline_run.json"
+        )
 
-    frontend_notifier = FrontendNotifier(host="0.0.0.0", port=8766)
+        frontend_notifier = FrontendNotifier(host=config.WS_HOST, port=config.FRONTEND_PORT)
 
-    behavior_processor_root = Path(__file__).parent.parent.parent
-    webapp_root = behavior_processor_root.parent / "webApp"
-    realtime_output_dir = webapp_root / "obj" / "realtime"
-    reference_dir = Path(__file__).parent.parent / "Reference"
-    reference_webapp_dir = webapp_root / "obj" / "reference"
-    reference_webapp_dir.mkdir(parents=True, exist_ok=True)
+        webapp_root = config.WEBAPP_ROOT
+        realtime_output_dir = webapp_root / "obj" / "realtime"
+        reference_dir = config.REFERENCE_DIR
+        reference_webapp_dir = webapp_root / "obj" / "reference"
+        reference_webapp_dir.mkdir(parents=True, exist_ok=True)
 
-    sync_reference_to_webapp(reference_dir, reference_webapp_dir)
+        sync_reference_to_webapp(reference_dir, reference_webapp_dir)
 
-    receiver = XRDataReceiver(save_dir=str(realtime_output_dir / "received_data"))
-    processor = XRDataProcessor(
-        output_dir=str(realtime_output_dir),
-        webapp_root=webapp_root,
-        frontend_notifier=frontend_notifier,
-        num_workers=2,
-        reference_dir=str(reference_dir)
-    )
+        receiver = XRDataReceiver(save_dir=str(realtime_output_dir / "received_data"))
+        processor = XRDataProcessor(
+            output_dir=str(realtime_output_dir),
+            webapp_root=webapp_root,
+            frontend_notifier=frontend_notifier,
+            num_workers=2,
+            reference_dir=str(reference_dir)
+        )
 
-    await frontend_notifier.start_server()
+        await frontend_notifier.start_server()
 
-    await receiver.start_server(
-        host=config.WS_HOST,
-        port=config.WS_PORT,
-        processor=processor
-    )
+        await receiver.start_server(
+            host=config.WS_HOST,
+            port=config.WS_PORT,
+            processor=processor
+        )
+    finally:
+        logger.info("Shutting down XR data server...")
+        if receiver:
+            await receiver.stop_server()
+        if frontend_notifier:
+            await frontend_notifier.stop_server()
+        if processor:
+            await processor.shutdown()
+        logger.info("Shutdown complete")
 
 
 if __name__ == "__main__":
-    import sys
-    import os
-    import signal
-    import atexit
-
-    def hide_traceback(exctype, value, tb):
-        if exctype is not KeyboardInterrupt:
-            sys.__excepthook__(exctype, value, tb)
-    sys.excepthook = hide_traceback
-
-    def cleanup():
-        if not processor:
-            return
-        try:
-            processor.pointcloud_pool._processes.clear()
-            processor.pointcloud_pool.shutdown(wait=False, cancel_futures=True)
-        except Exception as e:
-            logger.error(f"Cleanup error: {e}")
-
-    def signal_handler(signum, frame):
-        cleanup()
-        os._exit(0)
-
-    signal.signal(signal.SIGINT, signal_handler)
-    atexit.register(cleanup)
-
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        pass
+        logger.info("Shutdown requested by keyboard interrupt")

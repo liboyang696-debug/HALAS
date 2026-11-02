@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -39,7 +39,7 @@ namespace ExplainableXR
         }
 
         /// <summary>
-        /// 停止录音并直接返回音频数据（不保存到文件）
+        /// Stop recording and return WAV data without writing an audio file.
         /// </summary>
         public async void RecordStopAndGetData(string fileName, Action<byte[], float> onComplete = null)
         {
@@ -50,7 +50,7 @@ namespace ExplainableXR
             var audioChunk = microphoneRecordManager.StopRecordAndGetData();
             byte[] wavBytes = await AudioClipWavConverter.ConvertAudioChunkToWavAsync(audioChunk, null);
             float duration = audioChunk.Length/ (float)audioChunk.Frequency;
-            
+
             onComplete?.Invoke(wavBytes, duration);
         }
 

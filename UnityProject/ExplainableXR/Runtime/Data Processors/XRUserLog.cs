@@ -243,6 +243,7 @@ namespace ExplainableXR
             public ReferentType userActionReferentType;
             public ActionContextType userActionContextType;
             public LogRecordType logRecordType;
+            public bool captureReferent;
         }
 
         private int GetNewContinuousActionLogId()
@@ -262,7 +263,8 @@ namespace ExplainableXR
             Transform userActionReferentTransform,
             ReferentType userActionReferentType,
             ActionContextType userActionContextType,
-            LogRecordType logRecordType = LogRecordType.UBRLog)
+            LogRecordType logRecordType = LogRecordType.UBRLog,
+            bool captureReferent = true)
         {
             int logId = GetNewContinuousActionLogId();
             cachedActions[logId] = new CachedActionProperties()
@@ -275,14 +277,15 @@ namespace ExplainableXR
                 userActionReferentTransform = userActionReferentTransform,
                 userActionReferentType = userActionReferentType,
                 userActionContextType = userActionContextType,
-                logRecordType = logRecordType
+                logRecordType = logRecordType,
+                captureReferent = captureReferent
             };
 
             LogAction(
                 userAction, userActionIntent, logId, userActionTriggerSrc,
                 userActionTriggerSrcTransform, DEFAULT_CONTINUOUS_ACTION_DURATION_SEC,
                 userActionReferent, userActionReferentTransform, userActionReferentType,
-                userActionContextType, logRecordType);
+                userActionContextType, logRecordType, captureReferent);
 
             if (userActionTriggerSrc == ActionTriggerSource.Microphone)
                 audioRecordManager.RecordStart();
@@ -305,7 +308,7 @@ namespace ExplainableXR
                 data.userAction, data.userActionIntent, logId, data.userActionTriggerSrc,
                 data.userActionTriggerSrcTransform, DEFAULT_CONTINUOUS_ACTION_DURATION_SEC,
                 data.userActionReferent, data.userActionReferentTransform, data.userActionReferentType,
-                data.userActionContextType, data.logRecordType);
+                data.userActionContextType, data.logRecordType, data.captureReferent);
 
             return 1;
         }
@@ -348,9 +351,41 @@ namespace ExplainableXR
                 data.userAction, data.userActionIntent, logId, data.userActionTriggerSrc,
                 data.userActionTriggerSrcTransform, DEFAULT_CONTINUOUS_ACTION_DURATION_SEC,
                 data.userActionReferent, data.userActionReferentTransform, data.userActionReferentType,
-                data.userActionContextType, data.logRecordType);
+                data.userActionContextType, data.logRecordType, data.captureReferent);
 
             cachedActions.Remove(logId);
+            return 1;
+        }
+
+        // Close only the local continuous-action cache. This deliberately does
+        // not create an UBR-End: AoI rejection is represented by the separate
+        // transport-level AoICancel control message.
+        public int DiscardContinuousAction(int existingContinuousActionLogId)
+        {
+            CachedActionProperties data;
+            if (!cachedActions.TryGetValue(existingContinuousActionLogId, out data))
+                return 0;
+            if (data.userActionTriggerSrc == ActionTriggerSource.Microphone)
+                audioRecordManager.RecordStop((wavBytes, duration, fileName) => { });
+            cachedActions.Remove(existingContinuousActionLogId);
+            return 1;
+        }
+
+        public int EnableContinuousActionReferent(int existingContinuousActionLogId)
+        {
+            CachedActionProperties data;
+            if (!cachedActions.TryGetValue(existingContinuousActionLogId, out data))
+                return 0;
+            if (data.captureReferent) return 1;
+            data.captureReferent = true;
+
+            GameObject referent = data.userActionReferent as GameObject;
+            if (data.userActionReferentType == ReferentType.Virtual && referent != null)
+            {
+                GLBData glbData = new GLBData();
+                objectManager.SaveObject(referent, glbData,
+                    existingContinuousActionLogId, curTime);
+            }
             return 1;
         }
 
@@ -381,7 +416,8 @@ namespace ExplainableXR
             Transform userActionReferentTransform,
             ReferentType userActionReferentType,
             ActionContextType userActionContextType,
-            LogRecordType logRecordType = LogRecordType.UBRLog) => RecordUBRData(
+            LogRecordType logRecordType = LogRecordType.UBRLog,
+            bool captureReferent = true) => RecordUBRData(
                 action: userAction,
                 actionIntent: userActionIntent,
                 actionTypeAndIdBit: userActionTypeAndIdBit,
@@ -392,14 +428,16 @@ namespace ExplainableXR
                 actionReferentTransform: userActionReferentTransform,
                 actionReferentType: userActionReferentType,
                 actionContextType: userActionContextType,
-                logRecordType: logRecordType);
+                logRecordType: logRecordType,
+                captureReferent: captureReferent);
 
         // Core UBR data recording and dispatch
         public void RecordUBRData(
             string action, string actionIntent,
             int actionTypeAndIdBit, ActionTriggerSource actionTriggerSrc, Transform actionTransform, float actionDuration,
             object actionReferent, Transform actionReferentTransform, ReferentType actionReferentType,
-            ActionContextType actionContextType, LogRecordType logRecordType = LogRecordType.UBRLog)
+            ActionContextType actionContextType, LogRecordType logRecordType = LogRecordType.UBRLog,
+            bool captureReferent = true)
         {
             switch (logRecordType)
             {
@@ -423,7 +461,8 @@ namespace ExplainableXR
                     };
 
                     // Link GLB referent if virtual object is provided
-                    if (actionReferentType == ReferentType.Virtual && actionReferent != null)
+                    if (captureReferent && actionReferentType == ReferentType.Virtual
+                        && actionReferent != null)
                     {
                         var actionReferentGobj = actionReferent as GameObject;
                         if (actionReferentGobj != null)
@@ -434,7 +473,7 @@ namespace ExplainableXR
                         }
                     }
                     // AR Physical referent: take screenshot and enqueue image for upload
-                    else if (actionReferentType == ReferentType.Physical)
+                    else if (captureReferent && actionReferentType == ReferentType.Physical)
                     {
                         string referentFileName = imageRecordManager.TakePhysicalCameraScreenshot(
                             recordDepth: false,

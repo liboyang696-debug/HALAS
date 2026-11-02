@@ -20,12 +20,12 @@ namespace Whisper.Utils
     public static class LogUtils
     {
         public static LogLevel Level = LogLevel.Verbose;
-        
+
         public static void Exception(Exception msg)
         {
             Debug.LogException(msg);
         }
-        
+
         public static void Error(string msg)
         {
             Debug.LogError(msg);
@@ -44,12 +44,12 @@ namespace Whisper.Utils
                 return;
             Debug.Log(msg);
         }
-        
+
         public static void Verbose(string msg)
         {
             if (Level > LogLevel.Verbose)
                 return;
             Debug.Log(msg);
-        }      
+        }
     }
 }

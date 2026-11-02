@@ -1,4 +1,4 @@
-﻿// Adapted from whisper.unity github repository (https://github.com/Macoron/whisper.unity)
+// Adapted from whisper.unity github repository (https://github.com/Macoron/whisper.unity)
 // MIT License. Copyright (c) 2023 Macoron
 
 using System;
@@ -28,7 +28,7 @@ namespace Whisper.Utils
     public delegate void OnRecordStopDelegate(AudioChunk recordedAudio, string requestedAudioFileName);
 
     /// <summary>
-    /// Controls microphone input settings and recording. 
+    /// Controls microphone input settings and recording.
     /// </summary>
     public class MicrophoneRecord : MonoBehaviour
     {
@@ -89,7 +89,6 @@ namespace Whisper.Utils
 
         private int _lastVadPos;
         private AudioClip _clip;
-        private float _length;
         private int _lastChunkPos;
         private int _chunksLength;
         private float? _vadStopBegin;
@@ -319,54 +318,54 @@ namespace Whisper.Utils
             // finally, fire event
             OnRecordStop?.Invoke(finalAudio, requestedAudioFileSavePath);
         }
-        
-/// <summary>
-/// Stop microphone record and return audio data without saving to file.
-/// </summary>
-/// <param name="dropTimeSec">How many last recording seconds to drop.</param>
-/// <returns>Recorded audio chunk or null if not recording</returns>
-public AudioChunk StopRecordAndGetData(float dropTimeSec = 0f)
-{
-    if (!IsRecording)
-        return new AudioChunk();
 
-    // get all data from mic audio clip
-    var data = GetMicBuffer(dropTimeSec);
-    var finalAudio = new AudioChunk()
-    {
-        Data = data,
-        Channels = _clip.channels,
-        Frequency = _clip.frequency,
-        IsVoiceDetected = IsVoiceDetected,
-        Length = (float)data.Length / (_clip.frequency * _clip.channels)
-    };
+        /// <summary>
+        /// Stop microphone record and return audio data without saving to file.
+        /// </summary>
+        /// <param name="dropTimeSec">How many last recording seconds to drop.</param>
+        /// <returns>Recorded audio chunk, or an empty chunk if not recording.</returns>
+        public AudioChunk StopRecordAndGetData(float dropTimeSec = 0f)
+        {
+            if (!IsRecording)
+                return new AudioChunk();
 
-    // stop mic audio recording
-    Microphone.End(RecordStartMicDevice);
-    IsRecording = false;
-    Destroy(_clip);
-    LogUtils.Verbose($"Stopped microphone recording. Final audio length " +
-                     $"{finalAudio.Length} ({finalAudio.Data.Length} samples)");
+            // get all data from mic audio clip
+            var data = GetMicBuffer(dropTimeSec);
+            var finalAudio = new AudioChunk()
+            {
+                Data = data,
+                Channels = _clip.channels,
+                Frequency = _clip.frequency,
+                IsVoiceDetected = IsVoiceDetected,
+                Length = (float)data.Length / (_clip.frequency * _clip.channels)
+            };
 
-    // update VAD, no speech with disabled mic
-    if (IsVoiceDetected)
-    {
-        IsVoiceDetected = false;
-        OnVadChanged?.Invoke(false);
-    }
+            // stop mic audio recording
+            Microphone.End(RecordStartMicDevice);
+            IsRecording = false;
+            Destroy(_clip);
+            LogUtils.Verbose($"Stopped microphone recording. Final audio length " +
+                             $"{finalAudio.Length} ({finalAudio.Data.Length} samples)");
 
-    // play echo sound
-    if (echo)
-    {
-        var echoClip = AudioClip.Create("echo", data.Length,
-            finalAudio.Channels, finalAudio.Frequency, false);
-        echoClip.SetData(data, 0);
-        PlayAudioAndDestroy.Play(echoClip, Vector3.zero);
-    }
+            // update VAD, no speech with disabled mic
+            if (IsVoiceDetected)
+            {
+                IsVoiceDetected = false;
+                OnVadChanged?.Invoke(false);
+            }
 
-    // 不触发 OnRecordStop 事件，直接返回数据
-    return finalAudio;
-}
+            // play echo sound
+            if (echo)
+            {
+                var echoClip = AudioClip.Create("echo", data.Length,
+                    finalAudio.Channels, finalAudio.Frequency, false);
+                echoClip.SetData(data, 0);
+                PlayAudioAndDestroy.Play(echoClip, Vector3.zero);
+            }
+
+            // Return the captured audio without firing the file-saving OnRecordStop callback.
+            return finalAudio;
+        }
 
 
         /// <summary>

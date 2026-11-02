@@ -18,6 +18,7 @@ public class ARBehaviorRecorder : MonoBehaviour
 
     [Header("Tracking Config")]
     [SerializeField] private float continueActionSamplingInterval = 1.0f;
+    [SerializeField] [Range(0.01f, 0.05f)] private float bayesianUpdateInterval = 0.05f;
     [SerializeField] private float posSensitivity = 0.20f;
     [SerializeField] private float rotSensitivity = 25f;
 
@@ -40,7 +41,8 @@ public class ARBehaviorRecorder : MonoBehaviour
 
         // Initialize sub-recorders
         movementRecorder = new ARMovementRecorder(userHeadCam, exrLogger, aoiFilter,
-            continueActionSamplingInterval, minRGBDSamplingInterval, maxRGBDSamplingInterval);
+            continueActionSamplingInterval, bayesianUpdateInterval,
+            minRGBDSamplingInterval, maxRGBDSamplingInterval);
         interactionRecorder = new ARInteractionRecorder(userHeadCam, exrLogger, aoiFilter,
             raycastManager, arMarkerPrefab, unityMarkerPrefab, arMemoPrefab);
 
@@ -49,7 +51,7 @@ public class ARBehaviorRecorder : MonoBehaviour
             movementRecorder.OnDeviceMovementBegin,
             movementRecorder.OnDeviceMovementContinue,
             movementRecorder.OnDeviceMovementEnd,
-            continueActionSamplingInterval, posSensitivity, rotSensitivity);
+            bayesianUpdateInterval, posSensitivity, rotSensitivity);
         deviceMovementTracker.Start();
     }
 

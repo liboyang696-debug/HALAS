@@ -26,7 +26,6 @@ namespace ExplainableXR
         private string newActionName = "";
         private string newIntentName = "";
         private string newIntentType = "";
-        private string newBindingPath = "";
 
         private IEnumerable<string> actionTriggerSourceData = null;
         private string[] actionTriggerSources = null;
@@ -34,7 +33,6 @@ namespace ExplainableXR
         private string[] actionTriggerSourcesBindings = null;
         private string curActionTriggerSource = null;
         private InputActionType curActionTriggerSourceActionType = default;
-        private string[] actionTriggerSourceControlTypes = null;
 
         private void OnEnable()
         {
@@ -628,7 +626,7 @@ namespace ExplainableXR
             public string BindingName; //centerEyePositionAction
             public InputActionType BindingActionType; //Value, Passthrough
             public string BindingReadValueType; //Vector3
-            public string BindingFullPath; //<XRHMD>/centerEyePosition 
+            public string BindingFullPath; //<XRHMD>/centerEyePosition
         }
 
         public List<BindingData> BindingDataList = new();

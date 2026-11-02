@@ -17,10 +17,23 @@ namespace ExplainableXR
         private ClientWebSocket _ws;
         private int _seq = 0;
         private bool _isConnected = false;
+        private bool _isConnecting = false;
+
+        public string LastSentMessageType { get; private set; } = "";
+        public long LastSentPayloadBytes { get; private set; }
+        public long LastSentFrameBytes { get; private set; }
 
         async void Awake()
         {
             await ConnectToEdgeServer();
+        }
+
+        async void Update()
+        {
+            if (!IsReady() && !_isConnecting)
+            {
+                await ReconnectAsync();
+            }
         }
 
         void OnApplicationQuit()
@@ -30,15 +43,22 @@ namespace ExplainableXR
 
         private async Task ConnectToEdgeServer()
         {
+            _isConnecting = true;
             _ws = new ClientWebSocket();
             try
             {
                 await _ws.ConnectAsync(new Uri(wsUrl), CancellationToken.None);
                 _isConnected = true;
+                Debug.Log($"[EdgeUploader] Connected to {wsUrl}");
             }
-            catch (Exception)
+            catch (Exception e)
             {
                 _isConnected = false;
+                Debug.LogWarning($"[EdgeUploader] Connect failed to {wsUrl}: {e.Message}");
+            }
+            finally
+            {
+                _isConnecting = false;
             }
         }
 
@@ -58,10 +78,15 @@ namespace ExplainableXR
         }
 
         // Send UBR JSON data to edge server
-        public async Task SendUBRAsync(string ubrJson, string sceneId = "default", string ubrId = null)
+        public async Task SendUBRAsync(string ubrJson, string sceneId = "default")
         {
-            if (!IsReady() || string.IsNullOrEmpty(ubrJson))
+            if (string.IsNullOrEmpty(ubrJson))
                 return;
+            if (!IsReady())
+            {
+                Debug.LogWarning("[EdgeUploader] UBR skipped because WebSocket is not connected.");
+                return;
+            }
 
             byte[] ubrBytes = Encoding.UTF8.GetBytes(ubrJson);
 
@@ -85,6 +110,25 @@ namespace ExplainableXR
             };
 
             await SendFrameAsync(manifest, ubrBytes);
+        }
+
+        // AoI cancellation is a tiny transport-control frame. It is not an UBR
+        // field and is never used as Tiny Model input.
+        public async Task SendAoICancelAsync(int actionId, int fragmentSequence,
+            string sceneId = "default")
+        {
+            if (!IsReady() || actionId <= 0) return;
+            var manifest = new Dictionary<string, object>
+            {
+                { "type", "AoICancel" },
+                { "timestamp", NowSec() },
+                { "scene_id", sceneId },
+                { "seq", _seq++ },
+                { "action_id", actionId },
+                { "fragment_seq", fragmentSequence },
+                { "parts", new List<Dictionary<string, object>>() }
+            };
+            await SendFrameAsync(manifest, Array.Empty<byte>());
         }
 
         // Send RGBD context images and camera data
@@ -284,6 +328,10 @@ namespace ExplainableXR
 
             await _ws.SendAsync(new ArraySegment<byte>(frame),
                 WebSocketMessageType.Binary, true, CancellationToken.None);
+            LastSentMessageType = manifest["type"].ToString();
+            LastSentPayloadBytes = payload.LongLength;
+            LastSentFrameBytes = frame.LongLength;
+            Debug.Log($"[EdgeUploader] Sent {manifest["type"]} seq={manifest["seq"]} bytes={payload.Length}");
         }
 
         private bool IsReady()

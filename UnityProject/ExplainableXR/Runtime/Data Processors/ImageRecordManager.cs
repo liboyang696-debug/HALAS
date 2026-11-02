@@ -32,6 +32,13 @@ namespace ExplainableXR
 
         // Constructor for VR environment (virtual depth via shader)
         public ImageRecordManager(MonoBehaviour monoBehaviour, Camera snapshotCam, string rootDirName)
+            : this(monoBehaviour, snapshotCam, rootDirName, false)
+        {
+        }
+
+        // Constructor for VR color-only capture. This reuses the same 1/4-resolution
+        // virtual color camera path without allocating depth or hand capture cameras.
+        public ImageRecordManager(MonoBehaviour monoBehaviour, Camera snapshotCam, string rootDirName, bool colorOnly)
         {
             dirName = Path.Combine(rootDirName, "Image");
             depthDirName = Path.Combine(rootDirName, "Depth");
@@ -41,22 +48,28 @@ namespace ExplainableXR
             var contextDirName = Path.Combine(rootDirName, "Context");
 
             Directory.CreateDirectory(dirName);
-            Directory.CreateDirectory(depthDirName);
-            Directory.CreateDirectory(handDirName);
-            Directory.CreateDirectory(confidenceDirName);
-            Directory.CreateDirectory(metaDirName);
-            Directory.CreateDirectory(contextDirName);
+            if (!colorOnly)
+            {
+                Directory.CreateDirectory(depthDirName);
+                Directory.CreateDirectory(handDirName);
+                Directory.CreateDirectory(confidenceDirName);
+                Directory.CreateDirectory(metaDirName);
+                Directory.CreateDirectory(contextDirName);
+            }
             targetMono = monoBehaviour;
             imageIndex = 1;
             mainCam = snapshotCam;
             CreateColorCamera();
+            colorTexture = new Texture2D(colorCam.pixelWidth, colorCam.pixelHeight, TextureFormat.ARGB32, false);
+            colorTexture.filterMode = FilterMode.Point;
+            if (colorOnly)
+                return;
+
             CreateDepthCamera();
             CreateHandCamera();
             CreateDepthHandCamera();
             depthTexture = new Texture2D(depthCam.pixelWidth, depthCam.pixelHeight, TextureFormat.RFloat, false);
             depthTexture.filterMode = FilterMode.Point;
-            colorTexture = new Texture2D(colorCam.pixelWidth, colorCam.pixelHeight, TextureFormat.ARGB32, false);
-            colorTexture.filterMode = FilterMode.Point;
             handTexture = new Texture2D(handCam.pixelWidth, handCam.pixelHeight, TextureFormat.ARGB32, false);
             handTexture.filterMode = FilterMode.Point;
             depthHandTexture = new Texture2D(depthHandCam.pixelWidth, depthHandCam.pixelHeight, TextureFormat.RFloat, false);
@@ -292,6 +305,18 @@ namespace ExplainableXR
             return fileName;
         }
 
+        public string TakeVirtualColorScreenshot(string fileName, Action<Texture2D, string> onComplete = null)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                System.Threading.Interlocked.Increment(ref imageIndex);
+                fileName = $"{imageIndex}.png";
+            }
+
+            targetMono.StartCoroutine(ColorOnlyCamScreenshot(fileName, onComplete));
+            return fileName;
+        }
+
         private IEnumerator CaptureCoroutine(ActionTriggerSource actionTriggerSource, string fileName,
             GameObject actionReferent, Action<Texture2D, Texture2D, string, string> onComplete)
         {
@@ -359,6 +384,25 @@ namespace ExplainableXR
             RenderTexture.active = curRT;
 
             onComplete?.Invoke(newColorTexture);
+        }
+
+        private IEnumerator ColorOnlyCamScreenshot(string fileName, Action<Texture2D, string> onComplete = null)
+        {
+            yield return new WaitForEndOfFrame();
+            var curRT = RenderTexture.active;
+            colorCam.enabled = true;
+            RenderTexture.active = colorCam.targetTexture;
+            colorCam.Render();
+
+            Texture2D newColorTexture = new Texture2D(colorTexture.width, colorTexture.height, colorTexture.format, false);
+            newColorTexture.ReadPixels(new Rect(0, 0, colorTexture.width, colorTexture.height), 0, 0, false);
+            newColorTexture.Apply();
+
+            colorCam.enabled = false;
+            RenderTexture.active = curRT;
+            SaveColorTextureAsPNG(newColorTexture, fileName);
+
+            onComplete?.Invoke(newColorTexture, fileName);
         }
 
         private IEnumerator DepthCamScreenshot(string fileName = null,

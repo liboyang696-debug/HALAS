@@ -10,9 +10,13 @@ from typing import Optional
 import logging
 from collections import deque
 import tempfile
+import time
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
-from ultralytics import YOLO
+try:
+    from ultralytics import YOLO
+except Exception:
+    YOLO = None
 
 project_root = Path(__file__).resolve().parent.parent.parent
 llm_dir = str(Path(__file__).resolve().parent.parent / "LLM")
@@ -20,10 +24,27 @@ sys.path.insert(0, str(project_root))
 sys.path.insert(0, llm_dir)
 
 import config
+from baseline_modes import (
+    BaselineController,
+    EDGE_ONLY,
+    NAIVE_ONLINE_LLM,
+    RULE_BASED,
+    policy_for_mode,
+)
 from llm_caller import LLMCaller
-from point_cloud_worker import reconstruct_point_cloud_task
+try:
+    from point_cloud_worker import reconstruct_point_cloud_task
+except Exception:
+    reconstruct_point_cloud_task = None
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_XR_ACTION_CONTEXT_DESCRIPTION = ""
+
+
+def _ignore_worker_sigint():
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
 class XRDataProcessor:
@@ -33,13 +54,30 @@ class XRDataProcessor:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         for subdir in ["logs", "context", "hand", "voice", "glb"]:
             (self.output_dir / subdir).mkdir(exist_ok=True)
+        baseline_config_path = (
+            Path(config.BASELINE_CONFIG_PATH)
+            if config.BASELINE_CONFIG_PATH else None
+        )
+        baseline_metrics_dir = (
+            Path(config.BASELINE_METRICS_DIR)
+            if config.BASELINE_METRICS_DIR else self.output_dir
+        )
+        self.baseline_controller = BaselineController(
+            baseline_metrics_dir, config_path=baseline_config_path)
 
         self.reference_dir = Path(reference_dir) if reference_dir else Path(__file__).parent.parent / "Reference"
         self.reference_dir.mkdir(parents=True, exist_ok=True)
         self.pending_logs = deque()
         self.ar_referent_results = {}
-        self.yolo_model = YOLO(config.YOLO_MODEL_PATH)
-        logger.info(f"[YOLO] Loaded model: {config.YOLO_MODEL_PATH}")
+        self.yolo_model = None
+        if YOLO is None or not Path(config.YOLO_MODEL_PATH).is_file():
+            logger.info("[YOLO] disabled: install ultralytics and configure a local model file")
+        else:
+            try:
+                self.yolo_model = YOLO(config.YOLO_MODEL_PATH)
+                logger.info(f"[YOLO] Loaded model: {config.YOLO_MODEL_PATH}")
+            except Exception as e:
+                logger.warning(f"[YOLO] disabled: {e}")
 
         self.webapp_reference_dir = Path(webapp_root) / "obj" / "reference" if webapp_root else None
         if self.webapp_reference_dir:
@@ -49,54 +87,84 @@ class XRDataProcessor:
         self.enable_llm = True
         self.llm_client = None
         self.whisper_model = None
+        self.llm_caller = None
         self.cached_context = None
-        self.cached_action_description = "This is a test description"
+        self.cached_action_description = DEFAULT_XR_ACTION_CONTEXT_DESCRIPTION
         self.frontend_notifier = frontend_notifier
         self.event_loop = asyncio.get_event_loop()
-        self.continuous_actions = {}
+        self.background_tasks = set()
 
         if webapp_root:
-            self.webapp_context_dir = Path(webapp_root) / "obj" / "realtime" / "context"
-            self.webapp_hand_dir = Path(webapp_root) / "obj" / "realtime" / "hand"
+            self.webapp_realtime_dir = Path(webapp_root) / "obj" / "realtime"
+            self.webapp_context_dir = self.webapp_realtime_dir / "context"
+            self.webapp_hand_dir = self.webapp_realtime_dir / "hand"
+            self.webapp_realtime_dir.mkdir(parents=True, exist_ok=True)
             self.webapp_context_dir.mkdir(parents=True, exist_ok=True)
             self.webapp_hand_dir.mkdir(parents=True, exist_ok=True)
         else:
+            self.webapp_realtime_dir = None
             self.webapp_context_dir = None
             self.webapp_hand_dir = None
 
         self.num_workers = min(multiprocessing.cpu_count(), num_workers)
-        self.pointcloud_pool = ProcessPoolExecutor(max_workers=self.num_workers)
-
-        if self.enable_llm:
-            self._init_models()
-
-    def _init_models(self):
-        from openai import OpenAI
-        import whisper
-
-        self.llm_client = OpenAI(api_key=config.OPENAI_API_KEY)
-        self.whisper_model = whisper.load_model(config.WHISPER_MODEL)
-
-        from llm_voting import SemanticEntropyVoting
-        import models as voting_models
-
-        if voting_models.embeddings_model is None:
-            voting_models.init_models()
-
-        voting_system = SemanticEntropyVoting(
-            embeddings_model=voting_models.embeddings_model,
-            tokenizer=voting_models.tokenizer
+        self.pointcloud_pool = ProcessPoolExecutor(
+            max_workers=self.num_workers,
+            initializer=_ignore_worker_sigint
         )
 
+        if self.enable_llm:
+            try:
+                self._init_models()
+            except Exception as e:
+                self.enable_llm = False
+                self.llm_caller = None
+                logger.warning(f"[LLM] disabled, using interface placeholder: {e}")
+
+    def _init_models(self):
         self.llm_caller = LLMCaller(
-            self.llm_client, voting_system,
-            confidence_threshold=-0.003, alpha=0.1
+            None, None,
+            confidence_threshold=config.TOKEN_CONFIDENCE_THRESHOLD,
+            alpha=config.TOKEN_CONFIDENCE_ALPHA
         )
 
     async def process_log(self, data):
+        processing_started = float(
+            getattr(data, 'behavior_occurred_perf', 0.0)
+            or getattr(data, 'received_perf', 0.0)
+            or time.perf_counter()
+        )
         try:
             full_ubr = self._enrich_ubr(data)
-            full_ubr = self._calculate_continuous_action_duration(full_ubr)
+            policy = self.baseline_controller.policy
+            full_ubr['BaselineMode'] = policy.mode
+            full_ubr['_BaselineRunId'] = self.baseline_controller.run_id
+            # Each received UBR is already one complete model input. Do not
+            # reconstruct Begin/Continue/End episodes or mutate its Duration.
+            full_ubr['_B2IStartedPerf'] = processing_started
+
+            if not self.baseline_controller.allows_ubr(full_ubr):
+                self.baseline_controller.record(
+                    full_ubr=full_ubr,
+                    seq=data.seq,
+                    phase=data.phase,
+                    fragment_seq=data.fragment_seq,
+                    event_kind="filtered",
+                    result={
+                        "status": "filtered",
+                        "model_route": (
+                            "offline_excluded" if policy.offline
+                            else "rule_filter"
+                        ),
+                    },
+                    processing_latency_ms=(
+                        time.perf_counter() - processing_started) * 1000.0,
+                    detail=(
+                        "Explainable XR is offline"
+                        if policy.offline
+                        else "Rule-Based keeps Interaction/Communication only"
+                    ),
+                )
+                return
 
             referent = full_ubr.get('ActionReferentName', '')
             referent_type = full_ubr.get('ActionReferentType', '')
@@ -116,25 +184,51 @@ class XRDataProcessor:
                     })
                     logger.info(f"[Log] AR ref '{ref_key}' waiting for ARPNG")
                     return
-            elif referent and referent != 'PostDefined':
-                if not self._check_referent_exists(referent, user):
+            elif (
+                referent
+                and referent != 'PostDefined'
+                and not bool(full_ubr.get("ExperimentReplay", False))
+            ):
+                provisional = str(getattr(data, 'aoi_state', '')).lower() == 'provisional'
+                if not provisional and not self._check_referent_exists(referent, user):
                     self.pending_logs.append({
                         'data': data, 'full_ubr': full_ubr,
                         'referent_name': referent, 'user': user
                     })
                     return
 
-            insight_result = await self.llm_caller.generate_ubr_insight(full_ubr)
+            insight_result = await self._generate_insight(
+                full_ubr, data.phase, data.fragment_seq)
 
             if insight_result:
                 full_ubr['insight'] = insight_result['insight']
                 full_ubr['insight_status'] = insight_result['status']
+                full_ubr['baseline_mode'] = insight_result.get(
+                    'baseline_mode', policy.mode)
+                full_ubr['model_route'] = insight_result.get('model_route', '')
 
                 if self.frontend_notifier:
-                    await self._notify_frontend_new_log(full_ubr, data.seq, insight_result)
+                    await self._notify_frontend_new_log(
+                        full_ubr, data.seq, insight_result,
+                        data.phase, data.fragment_seq)
+                insight_result['b2i_latency_ms'] = (
+                    time.perf_counter() - processing_started
+                ) * 1000.0
+
+                self.baseline_controller.record(
+                    full_ubr=full_ubr,
+                    seq=data.seq,
+                    phase=data.phase,
+                    fragment_seq=data.fragment_seq,
+                    event_kind="initial_insight",
+                    result=insight_result,
+                    processing_latency_ms=insight_result['b2i_latency_ms'],
+                )
 
                 if insight_result['status'] == 'pending':
-                    asyncio.create_task(self._handle_cloud_voting(full_ubr, data))
+                    self._start_background_task(
+                        self._handle_cloud_voting(full_ubr, data)
+                    )
             else:
                 full_ubr['insight_status'] = 'error'
 
@@ -142,16 +236,81 @@ class XRDataProcessor:
         except Exception as e:
             logger.error(f"[Log] process failed: {e}")
 
+    async def process_aoi_cancel(self, data):
+        """Forward an explicit XR-side rejection without invoking either model."""
+        if not self.frontend_notifier or data.action_id <= 0:
+            return
+        await self.frontend_notifier.notify_clients({
+            "type": "aoi_cancel",
+            "seq": data.seq,
+            "action_id": data.action_id,
+            "fragment_seq": data.fragment_seq,
+            "status": "rejected",
+            "reason": "RejectedByAoI"
+        })
+
     async def _handle_cloud_voting(self, full_ubr: dict, data):
+        if self.llm_caller is None:
+            return
+        policy = policy_for_mode(full_ubr.get('baseline_mode'))
+        if not policy.cloud_fallback:
+            return
+        started = time.perf_counter()
         try:
-            refined = await self.llm_caller.refine_insight_with_voting(full_ubr)
+            refined = await self.llm_caller.refine_insight_with_voting(
+                full_ubr, data.phase, data.fragment_seq)
 
             if refined:
+                refined['baseline_mode'] = policy.mode
+                refined['b2i_latency_ms'] = (
+                    time.perf_counter()
+                    - float(full_ubr.get('_B2IStartedPerf', started))
+                ) * 1000.0
                 full_ubr['insight'] = refined['insight']
                 full_ubr['insight_status'] = 'completed'
+                full_ubr['consensus_score'] = refined.get('consensus_score')
+                full_ubr['consensus_source'] = refined.get('consensus_source')
+                full_ubr['model_route'] = refined.get('model_route', '')
 
                 if self.frontend_notifier:
-                    await self._notify_frontend_insight_update(data.seq, refined)
+                    await self._notify_frontend_insight_update(data.seq, refined, full_ubr)
+                refined['b2i_latency_ms'] = (
+                    time.perf_counter()
+                    - float(full_ubr.get('_B2IStartedPerf', started))
+                ) * 1000.0
+                self.baseline_controller.record(
+                    full_ubr=full_ubr,
+                    seq=data.seq,
+                    phase=data.phase,
+                    fragment_seq=data.fragment_seq,
+                    event_kind="cloud_completion",
+                    result=refined,
+                    processing_latency_ms=(
+                        time.perf_counter() - started) * 1000.0,
+                )
+            else:
+                failure = {
+                    "insight": full_ubr.get("insight", "None Cloud"),
+                    "status": "error",
+                    "baseline_mode": policy.mode,
+                    "model_route": "cloud_voting_failed",
+                    "cloud_called": True,
+                    "cloud_call_count": 3,
+                    "b2i_latency_ms": (
+                        time.perf_counter()
+                        - float(full_ubr.get('_B2IStartedPerf', started))
+                    ) * 1000.0,
+                }
+                self.baseline_controller.record(
+                    full_ubr=full_ubr,
+                    seq=data.seq,
+                    phase=data.phase,
+                    fragment_seq=data.fragment_seq,
+                    event_kind="cloud_failure",
+                    result=failure,
+                    processing_latency_ms=failure["b2i_latency_ms"],
+                    detail="No cloud provider returned a usable insight",
+                )
         except Exception as e:
             logger.error(f"[Cloud voting] seq={data.seq} failed: {e}")
 
@@ -163,9 +322,10 @@ class XRDataProcessor:
                 rgb_path = self.output_dir / "context" / data.color_filename
                 asyncio.create_task(asyncio.to_thread(self._write_binary_file, rgb_path, data.color_data))
 
-                desc = await self.llm_caller.get_context_description(data.color_data, data.seq)
-                if desc:
-                    self.cached_action_description = desc
+                if self.llm_caller:
+                    desc = await self.llm_caller.get_context_description(data.color_data, data.seq)
+                    if desc:
+                        self.cached_action_description = self._scene_aligned_context_description(desc)
 
             if data.depth_data and data.camera_json:
                 file_num = self._extract_file_number(data.color_filename) if data.color_filename else data.seq
@@ -203,8 +363,16 @@ class XRDataProcessor:
             asyncio.create_task(asyncio.to_thread(
                 self._write_binary_file, user_dir / data.filename, data.audio_data))
 
-            text = await asyncio.to_thread(self._whisper_transcribe, data.audio_data)
-            if text and self.enable_llm:
+            if self.whisper_model is None:
+                try:
+                    import whisper
+                    self.whisper_model = whisper.load_model(config.WHISPER_MODEL)
+                except Exception as exc:
+                    logger.warning(f"[Whisper] disabled: {exc}")
+            text = await asyncio.to_thread(
+                self._whisper_transcribe, data.audio_data
+            ) if self.whisper_model else None
+            if text and self.llm_caller:
                 await self.llm_caller.get_voice_intent(text, data.seq)
         except Exception as e:
             logger.error(f"[Voice] failed: {e}")
@@ -251,6 +419,9 @@ class XRDataProcessor:
 
     async def _process_point_cloud(self, color_data, depth_data, camera_json,
                                    timestamp, seq, file_number, data_type, user="User1"):
+        if reconstruct_point_cloud_task is None:
+            logger.warning(f"[{data_type} GLB] skipped: point cloud worker dependencies are unavailable")
+            return
         try:
             output_name = f"{data_type}_{timestamp}_seq{file_number}"
             glb_dir = str(self.webapp_context_dir) if data_type == "context" else str(self.webapp_hand_dir)
@@ -264,7 +435,23 @@ class XRDataProcessor:
 
             if result['success']:
                 notify_path = result['webapp_relative_path'] or result['glb_path']
-                self._on_glb_created_callback(notify_path, data_type, output_name, user)
+                logger.info(
+                    f"[{data_type} GLB] seq={seq} created: {notify_path} "
+                    f"points={result.get('point_count', 0)}"
+                )
+                self._update_latest_model_manifest(data_type, notify_path, output_name, user)
+                await self._notify_frontend_new_glb(notify_path, data_type, output_name, user)
+                if data_type == "context":
+                    await asyncio.to_thread(
+                        self._cleanup_old_glbs,
+                        self.webapp_context_dir,
+                        config.MAX_CONTEXT_GLB_FILES
+                    )
+            else:
+                logger.warning(
+                    f"[{data_type} GLB] seq={seq} skipped: "
+                    f"{result.get('error', 'unknown error')}"
+                )
         except Exception as e:
             logger.error(f"[{data_type} GLB] seq={seq} error: {e}")
 
@@ -274,27 +461,13 @@ class XRDataProcessor:
             full_ubr['ActionContextDescription'] = self.cached_action_description
         return full_ubr
 
-    def _calculate_continuous_action_duration(self, ubr: dict) -> dict:
-        action_bit = ubr.get('ActionTypeAndIdBit', 0)
-        if action_bit == 0:
-            return ubr
-        ts = ubr.get('Timestamp', '')
-        current_time = self._parse_timestamp_to_seconds(ts)
-        if action_bit not in self.continuous_actions:
-            self.continuous_actions[action_bit] = {'start_timestamp': ts, 'start_time': current_time}
-            ubr['Duration'] = "000000_000000_000000"
-        else:
-            start = self.continuous_actions.pop(action_bit)
-            duration = current_time - start['start_time']
-            ubr['Duration'] = f"000000_000000_{int(duration * 1_000_000):06d}"
-        return ubr
-
-    def _parse_timestamp_to_seconds(self, timestamp: str) -> float:
-        if not timestamp or len(timestamp) < 15:
-            return 0.0
-        tp = timestamp[7:13]
-        ms = timestamp[14:] if len(timestamp) > 14 else '0'
-        return int(tp[:2]) * 3600 + int(tp[2:4]) * 60 + int(tp[4:6]) + int(ms) / 1000.0
+    @staticmethod
+    def _scene_aligned_context_description(description: str) -> str:
+        """Normalize supplied context text without adding unobserved scene details."""
+        text = re.sub(r"\s+", " ", str(description or "")).strip()
+        if not text:
+            return DEFAULT_XR_ACTION_CONTEXT_DESCRIPTION
+        return text.rstrip(". ") + "."
 
     def _whisper_transcribe(self, audio_data: bytes) -> Optional[str]:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
@@ -312,6 +485,8 @@ class XRDataProcessor:
         return int(match.group(1)) if match else 0
 
     def _yolo_detect_sync(self, image_data: bytes) -> tuple:
+        if self.yolo_model is None:
+            return "Unknown", 0.0
         nparr = np.frombuffer(image_data, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         results = self.yolo_model.predict(
@@ -343,7 +518,8 @@ class XRDataProcessor:
 
     async def _process_pending_log(self, data, full_ubr: dict):
         try:
-            insight_result = await self.llm_caller.generate_ubr_insight(full_ubr)
+            insight_result = await self._generate_insight(
+                full_ubr, data.phase, data.fragment_seq)
 
             if insight_result:
                 full_ubr['insight'] = insight_result['insight']
@@ -352,7 +528,9 @@ class XRDataProcessor:
                 if self.frontend_notifier:
                     await self._notify_frontend_new_log(full_ubr, data.seq, insight_result)
                 if insight_result['status'] == 'pending':
-                    asyncio.create_task(self._handle_cloud_voting(full_ubr, data))
+                    self._start_background_task(
+                        self._handle_cloud_voting(full_ubr, data)
+                    )
 
         except Exception as e:
             logger.error(f"[Pending Log] failed: {e}")
@@ -362,13 +540,58 @@ class XRDataProcessor:
         with open(path, 'wb') as f:
             f.write(data)
 
-    def _on_glb_created_callback(self, glb_path: str, data_type: str, output_name: str, user: str = "User1"):
+    def _start_background_task(self, coroutine):
+        task = asyncio.create_task(coroutine)
+        self.background_tasks.add(task)
+        task.add_done_callback(self.background_tasks.discard)
+        return task
+
+    def _cleanup_old_glbs(self, directory: Optional[Path], keep_count: int):
+        if not directory or keep_count <= 0:
+            return
+        try:
+            files = sorted(
+                directory.glob("*.glb"),
+                key=lambda path: path.stat().st_mtime,
+                reverse=True
+            )
+            for old_file in files[keep_count:]:
+                old_file.unlink(missing_ok=True)
+            removed = max(0, len(files) - keep_count)
+            if removed:
+                logger.info(f"[Context GLB] cleanup removed {removed} old files")
+        except Exception as e:
+            logger.warning(f"[Context GLB] cleanup failed: {e}")
+
+    def _update_latest_model_manifest(self, data_type: str, glb_path: str, output_name: str, user: str):
+        if not self.webapp_realtime_dir:
+            return
+        try:
+            manifest_path = self.webapp_realtime_dir / "latest_models.json"
+            manifest = {}
+            if manifest_path.exists():
+                with open(manifest_path, 'r', encoding='utf-8-sig') as f:
+                    manifest = json.load(f)
+            key = "context" if data_type == "context" else "referent"
+            manifest[key] = {
+                "url": str(glb_path).replace("\\", "/"),
+                "name": output_name,
+                "user": user
+            }
+            with open(manifest_path, 'w', encoding='utf-8') as f:
+                json.dump(manifest, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"[Model manifest] update failed: {e}")
+
+    async def _notify_frontend_new_glb(self, glb_path: str, data_type: str, output_name: str, user: str = "User1"):
         if self.frontend_notifier:
             msg = {"type": "new_glb", "data_type": data_type, "glb_path": glb_path,
                    "output_name": output_name, "user": user}
-            asyncio.run_coroutine_threadsafe(self.frontend_notifier.notify_clients(msg), self.event_loop)
+            await self.frontend_notifier.notify_clients(msg)
 
-    async def _notify_frontend_new_log(self, full_ubr: dict, seq: int, insight_result: dict):
+    async def _notify_frontend_new_log(self, full_ubr: dict, seq: int,
+                                       insight_result: dict, phase: str = "",
+                                       fragment_seq: int = -1):
         timestamp = full_ubr.get('Timestamp', '')
         if timestamp and len(timestamp) >= 15:
             tp = timestamp[7:13]
@@ -377,12 +600,28 @@ class XRDataProcessor:
         else:
             start_time = "00:00:00.000000"
 
+        action_type_and_id = int(full_ubr.get('ActionTypeAndIdBit', 0) or 0)
+        action_id = action_type_and_id & 0xFFFFFF
+        normalized_phase = (phase or '').strip().lower()
+        lifecycle_status = 'completed' if normalized_phase == 'end' else 'active'
+
         event_message = {
             "type": "new_log_event",
             "seq": seq,
+            "action_id": action_id,
+            "phase": phase,
+            "fragment_seq": fragment_seq,
+            "lifecycle_status": lifecycle_status,
             "start_time": start_time,
             "insight": insight_result['insight'],
             "insight_status": insight_result['status'],
+            "baseline_mode": insight_result.get('baseline_mode'),
+            "model_route": insight_result.get('model_route'),
+            "edge_confidence_score": insight_result.get('edge_confidence_score'),
+            "gate_would_defer": insight_result.get('gate_would_defer', False),
+            "cloud_called": insight_result.get('cloud_called', False),
+            "consensus_score": insight_result.get('consensus_score'),
+            "consensus_source": insight_result.get('consensus_source'),
             "event": {
                 "User": full_ubr.get('User', 'User1'),
                 "Name": full_ubr.get('UserAction', 'Unknown Action'),
@@ -402,15 +641,35 @@ class XRDataProcessor:
                 }],
                 "insight": insight_result['insight'],
                 "insight_status": insight_result['status'],
+                "baselineMode": insight_result.get('baseline_mode'),
+                "modelRoute": insight_result.get('model_route'),
+                "edgeConfidenceScore": insight_result.get('edge_confidence_score'),
+                "gateWouldDefer": insight_result.get('gate_would_defer', False),
+                "cloudCalled": insight_result.get('cloud_called', False),
+                "consensus_score": insight_result.get('consensus_score'),
+                "consensus_source": insight_result.get('consensus_source'),
                 "seq": seq,
+                "actionId": action_id,
+                "phase": phase,
+                "fragmentSequence": fragment_seq,
+                "lifecycleStatus": lifecycle_status,
                 "_startTimeSort": start_time
             }
         }
         await self.frontend_notifier.notify_clients(event_message)
 
-    async def _notify_frontend_insight_update(self, seq: int, insight_result: dict):
+    async def _notify_frontend_insight_update(self, seq: int, insight_result: dict,
+                                              full_ubr: dict = None):
+        action_type_and_id = int((full_ubr or {}).get('ActionTypeAndIdBit', 0) or 0)
         msg = {"type": "insight_update", "seq": seq,
-               "insight": insight_result['insight'], "insight_status": "completed"}
+               "action_id": action_type_and_id & 0xFFFFFF,
+               "insight": insight_result['insight'], "insight_status": "completed",
+               "baseline_mode": insight_result.get('baseline_mode'),
+               "model_route": insight_result.get('model_route'),
+               "cloud_called": insight_result.get('cloud_called', False),
+               "cloud_latency_ms": insight_result.get('cloud_latency_ms'),
+               "consensus_score": insight_result.get('consensus_score'),
+               "consensus_source": insight_result.get('consensus_source')}
         await self.frontend_notifier.notify_clients(msg)
 
     async def _notify_frontend_object_ready(self, filename: str, object_name: str, user: str = 'default'):
@@ -418,6 +677,95 @@ class XRDataProcessor:
                "user": user, "glb_path": f"obj/reference/{user}/{filename}"}
         await self.frontend_notifier.notify_clients(msg)
 
+    async def _generate_insight(self, full_ubr: dict, phase: str = "",
+                                fragment_seq: int = -1) -> dict:
+        policy = self.baseline_controller.policy
+        started = time.perf_counter()
+        if policy.mode == RULE_BASED:
+            return {
+                "insight": self._rule_based_5w1h_insight(full_ubr, phase),
+                "status": "completed",
+                "baseline_mode": policy.mode,
+                "model_route": "rule_5w1h",
+                "cloud_called": False,
+                "cloud_call_count": 0,
+                "gate_would_defer": False,
+                "b2i_latency_ms": (time.perf_counter() - started) * 1000.0,
+            }
+        if self.llm_caller:
+            if policy.mode == NAIVE_ONLINE_LLM:
+                result = await self.llm_caller.generate_cloud_insight(
+                    full_ubr, phase, config.NAIVE_CLOUD_PROVIDER)
+            elif policy.mode == EDGE_ONLY:
+                result = await self.llm_caller.generate_edge_only_insight(
+                    full_ubr, phase)
+            elif policy.edge_enabled:
+                result = await self.llm_caller.generate_ubr_insight(
+                    full_ubr, phase, fragment_seq)
+            else:
+                result = None
+            if result:
+                result = dict(result)
+                result['baseline_mode'] = policy.mode
+                if result.get('status') == 'pending' and not policy.cloud_fallback:
+                    result['status'] = 'completed'
+                    result['model_route'] = (
+                        'edge_forced_accept'
+                        if result.get('tiny_available', False)
+                        else 'edge_unavailable_no_fallback'
+                    )
+                    result['cloud_called'] = False
+                    result['cloud_call_count'] = 0
+                result['b2i_latency_ms'] = (
+                    time.perf_counter()
+                    - float(full_ubr.get('_B2IStartedPerf', started))
+                ) * 1000.0
+                return result
+        return {
+            "insight": "None Tiny",
+            "status": "completed",
+            "baseline_mode": policy.mode,
+            "model_route": "model_interface_unavailable",
+            "cloud_called": False,
+            "gate_would_defer": False,
+            "b2i_latency_ms": (time.perf_counter() - started) * 1000.0,
+        }
+
+    @staticmethod
+    def _rule_based_5w1h_insight(full_ubr: dict, phase: str = "") -> str:
+        """Deterministic 5W1H template; it never invokes an ML or cloud model."""
+        who = str(full_ubr.get('User') or 'Unknown user')
+        what = str(full_ubr.get('UserAction') or 'performed an XR behavior')
+        referent = str(full_ubr.get('ActionReferentName') or 'no named referent')
+        timestamp = str(full_ubr.get('Timestamp') or 'an unspecified time')
+        duration = str(full_ubr.get('Duration') or 'unspecified')
+        when = f"{timestamp}, duration {duration} seconds"
+        where = str(full_ubr.get('Location') or 'an unspecified XR location')
+        why = str(full_ubr.get('UserIntent') or 'an unspecified intent')
+        how = str(full_ubr.get('ActionTriggerSource') or 'an unspecified input')
+        lifecycle = f" ({phase})" if phase else ""
+        return (
+            f"Who: {who}. What: {what}{lifecycle} involving {referent}. "
+            f"When: {when}. Where: {where}. Why: {why}. How: {how}."
+        )
+
+    def _fallback_insight(self, full_ubr: dict) -> str:
+        action = full_ubr.get('UserAction', 'XR behavior')
+        intent = full_ubr.get('UserIntent', 'undefined intent')
+        referent = full_ubr.get('ActionReferentName', 'referent')
+        trigger = full_ubr.get('ActionTriggerSource', 'XR device')
+        return (
+            f"Interface placeholder: {action} was captured from {trigger} "
+            f"with intent '{intent}' and referent '{referent}'. Tiny-model "
+            "and cloud refinement are available through the existing service interfaces."
+        )
+
     async def shutdown(self):
-        self.pointcloud_pool.shutdown(wait=False)
-        await self.llm_caller.close()
+        if self.background_tasks:
+            await asyncio.gather(*list(self.background_tasks), return_exceptions=True)
+            self.background_tasks.clear()
+        if self.pointcloud_pool:
+            self.pointcloud_pool.shutdown(wait=False, cancel_futures=True)
+            self.pointcloud_pool = None
+        if self.llm_caller:
+            await self.llm_caller.close()

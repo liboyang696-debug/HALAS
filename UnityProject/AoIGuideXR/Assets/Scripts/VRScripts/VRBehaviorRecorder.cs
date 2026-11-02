@@ -31,6 +31,11 @@ public class VRBehaviorRecorder : MonoBehaviour
     [SerializeField] [Tooltip("Continuous action sampling interval (seconds)")]
     private float continueActionSamplingInterval = 0.5f;
 
+    [Header("AoI Local Bayesian Update")]
+    [SerializeField] [Range(0.01f, 0.05f)]
+    [Tooltip("Local posterior update interval. This does not upload an UBR.")]
+    private float bayesianUpdateInterval = 0.05f;
+
     [Header("XR Interactors")]
     public XRRayInteractor rayInteractorRight;
     public XRRayInteractor rayInteractorLeft;
@@ -59,14 +64,17 @@ public class VRBehaviorRecorder : MonoBehaviour
         UBRParserAndSender.Instance.SetLogger(exrLogger);
 
         // Initialize sub-recorders
-        eyeTrackingRecorder = new VREyeTrackingRecorder(userHeadCam, exrLogger, aoiFilter, continueActionSamplingInterval);
+        eyeTrackingRecorder = new VREyeTrackingRecorder(userHeadCam, exrLogger, aoiFilter,
+            continueActionSamplingInterval, bayesianUpdateInterval);
         eyeTrackingRecorder.Initialize();
 
         movementRecorder = new VRMovementRecorder(userHeadCam, VRHMD.transform, exrLogger, aoiFilter,
-            continueActionSamplingInterval, minRGBDSamplingInterval, maxRGBDSamplingInterval, moveSpeed: 2.0f);
+            continueActionSamplingInterval, bayesianUpdateInterval,
+            minRGBDSamplingInterval, maxRGBDSamplingInterval, moveSpeed: 2.0f);
 
         interactionRecorder = new VRInteractionRecorder(leftHand, rightHand, exrLogger, aoiFilter,
-            continueActionSamplingInterval, minHandSamplingInterval, maxHandSamplingInterval,
+            continueActionSamplingInterval, bayesianUpdateInterval,
+            minHandSamplingInterval, maxHandSamplingInterval,
             continueHandElapsedTime: 0.5f,
             rayInteractorLeft, rayInteractorRight, directInteractorLeft, directInteractorRight);
 
@@ -91,7 +99,8 @@ public class VRBehaviorRecorder : MonoBehaviour
         rightControllerTracker = new AoIXRControllerTracker(this, rightControllerInputAction,
             movementRecorder.OnRightJoystickStart, movementRecorder.OnRightJoystickHeld, movementRecorder.OnRightJoystickEnd);
         leftControllerVoiceTracker = new AoIXRControllerTracker(this, leftControllerVoiceInputAction,
-            voiceRecorder.OnTriggerPressed, voiceRecorder.OnTriggerHeld, voiceRecorder.OnTriggerReleased);
+            voiceRecorder.OnTriggerPressed, voiceRecorder.OnTriggerHeld, voiceRecorder.OnTriggerReleased,
+            actionInvokeInterval: bayesianUpdateInterval, holdInterval: continueActionSamplingInterval);
 
         leftControllerTracker.Start();
         rightControllerTracker.Start();
@@ -100,7 +109,7 @@ public class VRBehaviorRecorder : MonoBehaviour
         // Create and start HMD movement tracker
         hmdMovementTracker = new TransformTracker(this, VRHMD.transform,
             movementRecorder.OnHMDMovementBegin, movementRecorder.OnHMDMovementContinue, movementRecorder.OnHMDMovementEnd,
-            continueActionSamplingInterval, 0.075f, 10f);
+            bayesianUpdateInterval, 0.075f, 10f);
         hmdMovementTracker.Start();
 
         interactionRecorder.SubscribeToAllGrabbables();
@@ -108,8 +117,10 @@ public class VRBehaviorRecorder : MonoBehaviour
 
     private void Update()
     {
+        eyeTrackingRecorder.Tick();
         movementRecorder.SampleRGBD();
         interactionRecorder.SampleHand();
+        interactionRecorder.SampleGrabHeld();
     }
 
     private void OnDisable() => interactionRecorder?.UnsubscribeFromAllGrabbables();

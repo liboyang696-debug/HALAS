@@ -12,7 +12,6 @@ namespace ExplainableXR
     public class ObjectRecordManager
     {
         private string dirName = null;
-        private int objectIndex = 1;
         private Dictionary<GameObject, string> gobjToGLBFileName = new();
         private Queue<GLBData> glbQueue;
         private object glbQueueLock;

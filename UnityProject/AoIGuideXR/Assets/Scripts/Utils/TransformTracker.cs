@@ -18,6 +18,8 @@ namespace ExplainableXR
         private Quaternion lastRotation;
         private bool isMoving = false;
         private int actionId;
+        private float lastSignificantChangeTime;
+        private readonly float movementEndGraceSeconds;
 
         public TransformTracker(
             MonoBehaviour monoBehaviour,
@@ -27,7 +29,8 @@ namespace ExplainableXR
             Func<int, int> continuousActionEnd,
             float actionInvokeInterval = 0.5f,
             float posSensitivity = 0.075f,
-            float rotSensitivity = 15f)
+            float rotSensitivity = 15f,
+            float movementEndGraceSeconds = 0.25f)
             : base(monoBehaviour, actionInvokeInterval)
         {
             this.targetGobjTransform = targetGobjTransform;
@@ -37,6 +40,8 @@ namespace ExplainableXR
 
             this.posSensitivity = posSensitivity;
             this.rotSensitivity = rotSensitivity;
+            this.movementEndGraceSeconds = Mathf.Max(actionInvokeInterval,
+                movementEndGraceSeconds);
             lastPosition = targetGobjTransform.position;
             lastRotation = targetGobjTransform.rotation;
         }
@@ -45,17 +50,23 @@ namespace ExplainableXR
         {
             if (HasTransformChanged())
             {
+                lastSignificantChangeTime = Time.unscaledTime;
                 if (!isMoving)
                 {
                     actionId = continuousActionBegin.Invoke();
                     isMoving = true;
                 }
                 else
-                    continuousActionContinue.Invoke(actionId);
+                {
+                    int updatedActionId = continuousActionContinue.Invoke(actionId);
+                    if (updatedActionId >= 0) actionId = updatedActionId;
+                }
             }
-            else if (isMoving)
+            else if (isMoving
+                && Time.unscaledTime - lastSignificantChangeTime
+                    >= movementEndGraceSeconds)
             {
-                continuousActionEnd.Invoke(actionId);
+                actionId = continuousActionEnd.Invoke(actionId);
                 isMoving = false;
             }
         }

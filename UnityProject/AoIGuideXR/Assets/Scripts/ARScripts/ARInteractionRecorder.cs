@@ -41,15 +41,19 @@ public class ARInteractionRecorder
         var hitPose = hitResults[0].pose;
         var markerObj = Object.Instantiate(arMarkerPrefab, hitPose.position, Quaternion.identity);
 
-        var observedAction = new ObservedAction(UserActionType.Gesture, IntentType.Interaction,
-            "Place physical marker via AR ray", markerObj);
-        aoiFilter?.ProcessObservedAction(observedAction);
-
-        logger.LogDiscreteAction("Place Marker",
-            "Marking walkable paths in user's physical environment",
-            ActionTriggerSource.XRHMD, camTransform,
-            markerObj, markerObj.transform,
-            ReferentType.Physical, ActionContextType.Physical);
+        var observedAction = new ObservedAction(ActionEvidenceType.MarkerPlace,
+            "Place physical marker via AR ray", markerObj, 0, null,
+            BehaviorEventPhase.Discrete, TriggerModality.Handheld,
+            CurrentBehaviorState.Active);
+        AoIDecision decision = aoiFilter.ObserveEvidence(observedAction);
+        if (decision.shouldUpload)
+        {
+            logger.LogDiscreteAction("Place Marker",
+                "Marking walkable paths in user's physical environment",
+                ActionTriggerSource.XRHMD, camTransform,
+                markerObj, markerObj.transform,
+                ReferentType.Physical, ActionContextType.Physical);
+        }
     }
 
     // Inspect virtual object via Unity Physics raycast
@@ -66,15 +70,19 @@ public class ARInteractionRecorder
         indicator.transform.position = hits[0].point;
         Object.Destroy(indicator, 1.5f);
 
-        var observedAction = new ObservedAction(UserActionType.Gesture, IntentType.Interaction,
-            "Inspect virtual object via ray", hitObj);
-        aoiFilter?.ProcessObservedAction(observedAction);
-
-        logger.LogDiscreteAction("Inspection Check",
-            "Placing an additional indicator on an existing virtual marker",
-            ActionTriggerSource.XRHMD, camTransform,
-            hitObj, hitObj.transform,
-            ReferentType.Virtual, ActionContextType.Physical);
+        var observedAction = new ObservedAction(ActionEvidenceType.ARSelect,
+            "Inspect virtual object via ray", hitObj, 0, null,
+            BehaviorEventPhase.Discrete, TriggerModality.Handheld,
+            CurrentBehaviorState.Active);
+        AoIDecision decision = aoiFilter.ObserveEvidence(observedAction);
+        if (decision.shouldUpload)
+        {
+            logger.LogDiscreteAction("Inspection Check",
+                "Placing an additional indicator on an existing virtual marker",
+                ActionTriggerSource.XRHMD, camTransform,
+                hitObj, hitObj.transform,
+                ReferentType.Virtual, ActionContextType.Physical);
+        }
     }
 
     // Generate floating AR memo anchored at device's current position
@@ -86,14 +94,18 @@ public class ARInteractionRecorder
         memoObj.transform.rotation = camTransform.rotation;
         memoObj.AddComponent<ARAnchor>();
 
-        var observedAction = new ObservedAction(UserActionType.Gesture, IntentType.Interaction,
-            "Generate floating AR memo", memoObj);
-        aoiFilter?.ProcessObservedAction(observedAction);
-
-        logger.LogDiscreteAction("Generate Memo",
-            "Situating floating virtual marker at AR device's location",
-            ActionTriggerSource.ARHandHeld, camTransform,
-            memoObj, memoObj.transform,
-            ReferentType.Virtual, ActionContextType.Physical);
+        var observedAction = new ObservedAction(ActionEvidenceType.MemoCreate,
+            "Generate floating AR memo", memoObj, 0, null,
+            BehaviorEventPhase.Discrete, TriggerModality.Handheld,
+            CurrentBehaviorState.Active);
+        AoIDecision decision = aoiFilter.ObserveEvidence(observedAction);
+        if (decision.shouldUpload)
+        {
+            logger.LogDiscreteAction("Generate Memo",
+                "Situating floating virtual marker at AR device's location",
+                ActionTriggerSource.ARHandHeld, camTransform,
+                memoObj, memoObj.transform,
+                ReferentType.Virtual, ActionContextType.Physical);
+        }
     }
 }

@@ -13,13 +13,13 @@ namespace ExplainableXR
     {
         // Object Reference latency records
         private List<ObjectReferenceLatency> objectReferenceLatencies = new List<ObjectReferenceLatency>();
-        
+
         // Context (RGBD) latency records
         private List<ContextLatency> contextLatencies = new List<ContextLatency>();
-        
+
         private string saveDirectory;
         private bool isInitialized = false;
-        
+
         public class ObjectReferenceLatency
         {
             public string UAD_ID;              // UAD identifier
@@ -32,7 +32,7 @@ namespace ExplainableXR
             public string Timestamp;           // Timestamp
             public bool IsReferenceDelta;      // Is reference delta (skip encoding)
         }
-        
+
         public class ContextLatency
         {
             public string ContextID;           // Context identifier
@@ -45,9 +45,9 @@ namespace ExplainableXR
             public int DepthByteSize;          // Depth texture size (bytes)
             public string Timestamp;           // Timestamp
         }
-        
+
         public static LatencyStatisticsManager Instance { get; private set; }
-        
+
         public static void Initialize(string saveDir)
         {
             if (Instance == null)
@@ -55,29 +55,29 @@ namespace ExplainableXR
                 Instance = new LatencyStatisticsManager(saveDir);
             }
         }
-        
+
         private LatencyStatisticsManager(string saveDir)
         {
             saveDirectory = saveDir;
             isInitialized = true;
             Debug.Log($"<color=green>[LatencyStats] Initialized, save to: {saveDirectory}</color>");
         }
-        
+
         /// <summary>
         /// Record object reference latency
         /// </summary>
         public void RecordObjectReferenceLatency(
-            string uadID, 
-            string objectName, 
-            float encodingTime, 
-            float fileIOTime, 
-            float enqueueTime, 
-            float totalTime, 
+            string uadID,
+            string objectName,
+            float encodingTime,
+            float fileIOTime,
+            float enqueueTime,
+            float totalTime,
             int byteSize,
             bool isReferenceDelta = false)
         {
             if (!isInitialized) return;
-            
+
             var record = new ObjectReferenceLatency
             {
                 UAD_ID = uadID,
@@ -90,15 +90,15 @@ namespace ExplainableXR
                 Timestamp = System.DateTime.Now.ToString("HH:mm:ss.fff"),
                 IsReferenceDelta = isReferenceDelta
             };
-            
+
             lock (objectReferenceLatencies)
             {
                 objectReferenceLatencies.Add(record);
             }
-            
+
             Debug.Log($"<color=magenta>[LatencyStats] ObjectRef recorded: {uadID} | {objectName} | {totalTime:F2}ms | ReferenceDelta={isReferenceDelta}</color>");
         }
-        
+
         /// <summary>
         /// Record context (RGBD) latency
         /// </summary>
@@ -113,7 +113,7 @@ namespace ExplainableXR
             int depthByteSize)
         {
             if (!isInitialized) return;
-            
+
             var record = new ContextLatency
             {
                 ContextID = contextID,
@@ -126,15 +126,15 @@ namespace ExplainableXR
                 DepthByteSize = depthByteSize,
                 Timestamp = System.DateTime.Now.ToString("HH:mm:ss.fff")
             };
-            
+
             lock (contextLatencies)
             {
                 contextLatencies.Add(record);
             }
-            
+
             Debug.Log($"<color=magenta>[LatencyStats] Context recorded: {contextID} | {contextType} | {totalTime:F2}ms</color>");
         }
-        
+
         /// <summary>
         /// Save all statistics to text file
         /// Call this when Unity Editor stops (OnApplicationQuit)
@@ -142,10 +142,10 @@ namespace ExplainableXR
         public void SaveStatistics()
         {
             if (!isInitialized) return;
-            
+
             string timestamp = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
             string filePath = Path.Combine(saveDirectory, $"LatencyStatistics_{timestamp}.txt");
-            
+
             using (StreamWriter writer = new StreamWriter(filePath))
             {
                 writer.WriteLine("================================================================================");
@@ -155,7 +155,7 @@ namespace ExplainableXR
                 writer.WriteLine($"Total Object Reference records: {objectReferenceLatencies.Count}");
                 writer.WriteLine($"Total Context records: {contextLatencies.Count}");
                 writer.WriteLine();
-                
+
                 // ====================================================================
                 // OBJECT REFERENCE STATISTICS
                 // ====================================================================
@@ -163,16 +163,16 @@ namespace ExplainableXR
                 writer.WriteLine("1. OBJECT REFERENCE (GLB) LATENCY STATISTICS");
                 writer.WriteLine("================================================================================");
                 writer.WriteLine();
-                
+
                 if (objectReferenceLatencies.Count > 0)
                 {
                     // Separate normal encoding and reference delta
                     var normalRecords = objectReferenceLatencies.Where(r => !r.IsReferenceDelta).ToList();
                     var deltaRecords = objectReferenceLatencies.Where(r => r.IsReferenceDelta).ToList();
-                    
+
                     writer.WriteLine($"[A] Normal Encoding (first interaction): {normalRecords.Count} records");
                     writer.WriteLine("--------------------------------------------------------------------------------");
-                    
+
                     if (normalRecords.Count > 0)
                     {
                         var avgEncoding = normalRecords.Average(r => r.EncodingTime);
@@ -180,17 +180,17 @@ namespace ExplainableXR
                         var avgEnqueue = normalRecords.Average(r => r.EnqueueTime);
                         var avgTotal = normalRecords.Average(r => r.TotalTime);
                         var avgSize = normalRecords.Average(r => r.ByteSize);
-                        
+
                         var maxTotal = normalRecords.Max(r => r.TotalTime);
                         var minTotal = normalRecords.Min(r => r.TotalTime);
-                        
+
                         writer.WriteLine($"  Encoding Time    - Avg: {avgEncoding:F2}ms | Max: {normalRecords.Max(r => r.EncodingTime):F2}ms | Min: {normalRecords.Min(r => r.EncodingTime):F2}ms");
                         writer.WriteLine($"  File I/O Time    - Avg: {avgFileIO:F2}ms | Max: {normalRecords.Max(r => r.FileIOTime):F2}ms | Min: {normalRecords.Min(r => r.FileIOTime):F2}ms");
                         writer.WriteLine($"  Enqueue Time     - Avg: {avgEnqueue:F2}ms | Max: {normalRecords.Max(r => r.EnqueueTime):F2}ms | Min: {normalRecords.Min(r => r.EnqueueTime):F2}ms");
                         writer.WriteLine($"  TOTAL Time       - Avg: {avgTotal:F2}ms | Max: {maxTotal:F2}ms | Min: {minTotal:F2}ms");
                         writer.WriteLine($"  GLB Size         - Avg: {avgSize:F0}B ({avgSize/1024:F2}KB)");
                         writer.WriteLine();
-                        
+
                         writer.WriteLine("  Detailed Records:");
                         writer.WriteLine("  --------------------------------------------------------------------------------");
                         writer.WriteLine("  UAD_ID                    | Object Name        | Encoding | FileIO | Enqueue | Total  | Size(B)");
@@ -201,7 +201,7 @@ namespace ExplainableXR
                         }
                         writer.WriteLine();
                     }
-                    
+
                     writer.WriteLine($"[B] Reference Delta (repeated interaction): {deltaRecords.Count} records");
                     writer.WriteLine("--------------------------------------------------------------------------------");
                     writer.WriteLine("  (Skip encoding, only record reference)");
@@ -223,7 +223,7 @@ namespace ExplainableXR
                     writer.WriteLine("  No object reference records.");
                     writer.WriteLine();
                 }
-                
+
                 // ====================================================================
                 // CONTEXT (RGBD) STATISTICS
                 // ====================================================================
@@ -231,7 +231,7 @@ namespace ExplainableXR
                 writer.WriteLine("2. CONTEXT (RGBD) LATENCY STATISTICS");
                 writer.WriteLine("================================================================================");
                 writer.WriteLine();
-                
+
                 if (contextLatencies.Count > 0)
                 {
                     var avgCapture = contextLatencies.Average(r => r.CaptureTime);
@@ -240,10 +240,10 @@ namespace ExplainableXR
                     var avgTotal = contextLatencies.Average(r => r.TotalTime);
                     var avgColorSize = contextLatencies.Average(r => r.ColorByteSize);
                     var avgDepthSize = contextLatencies.Average(r => r.DepthByteSize);
-                    
+
                     var maxTotal = contextLatencies.Max(r => r.TotalTime);
                     var minTotal = contextLatencies.Min(r => r.TotalTime);
-                    
+
                     writer.WriteLine($"  Total Context Records: {contextLatencies.Count}");
                     writer.WriteLine("  --------------------------------------------------------------------------------");
                     writer.WriteLine($"  Capture Time     - Avg: {avgCapture:F2}ms | Max: {contextLatencies.Max(r => r.CaptureTime):F2}ms | Min: {contextLatencies.Min(r => r.CaptureTime):F2}ms");
@@ -253,7 +253,7 @@ namespace ExplainableXR
                     writer.WriteLine($"  Color Size       - Avg: {avgColorSize:F0}B ({avgColorSize/1024:F2}KB)");
                     writer.WriteLine($"  Depth Size       - Avg: {avgDepthSize:F0}B ({avgDepthSize/1024:F2}KB)");
                     writer.WriteLine();
-                    
+
                     writer.WriteLine("  Detailed Records:");
                     writer.WriteLine("  --------------------------------------------------------------------------------");
                     writer.WriteLine("  Context_ID                | Type    | Capture | Process | Enqueue | Total  | Color(B) | Depth(B)");
@@ -269,16 +269,16 @@ namespace ExplainableXR
                     writer.WriteLine("  No context records.");
                     writer.WriteLine();
                 }
-                
+
                 writer.WriteLine("================================================================================");
                 writer.WriteLine("END OF REPORT");
                 writer.WriteLine("================================================================================");
             }
-            
+
             Debug.Log($"<color=green>[LatencyStats] ✅ Statistics saved to: {filePath}</color>");
             Debug.Log($"<color=green>[LatencyStats] Total records: ObjectRef={objectReferenceLatencies.Count}, Context={contextLatencies.Count}</color>");
         }
-        
+
         /// <summary>
         /// Clear all statistics (for testing)
         /// </summary>
